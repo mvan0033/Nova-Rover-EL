@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <MCP342x.h>
+#include <utils.h>
+#include <adc_utils.h>
 
 /* Demonstrate the use of convertAndRead().
  */
@@ -10,8 +12,15 @@
 // 0x69
 // 0x6B
 // 0x6C
-uint8_t address = 0x68;
-MCP342x adc = MCP342x(address);
+
+// 0x6B is current (shoud be 0x69)
+// 0x69 is temp (should be 0x6B)
+
+uint8_t adc_temp_addr = 0x69;
+uint8_t adc_current_addr = 0x6B;
+
+MCP342x adc_temp = MCP342x(adc_temp_addr);
+MCP342x adc_current = MCP342x(adc_current_addr);
 
 void setup(void)
 {
@@ -22,36 +31,42 @@ void setup(void)
   MCP342x::generalCallReset();
   delay(1); // MC342x needs 300us to settle, wait 1ms
 
-  // Check device present
-  Wire.requestFrom(address, (uint8_t)1);
-  if (!Wire.available())
+  if(!util_check_i2c_device_exists(adc_current_addr))
   {
-    Serial.print("No device found at address ");
-    Serial.println(address, HEX);
-    while (1)
-      ;
+    Serial.print("No device found at ");
+    Serial.println(adc_current_addr,HEX);
+    while(1){
+      ;;
+    }
+  }
+
+  if(!util_check_i2c_device_exists(adc_temp_addr))
+  {
+    Serial.print("No device found at ");
+    Serial.println(adc_current_addr,HEX);
+    while(1){
+      ;;
+    }
   }
 }
 
 void loop(void)
 {
-  long value = 0;
+  // Read using convenience functions
+  double value_current_voltage = adc_read_voltage(&adc_current,MCP342x::channel1,5);
+  Serial.print("CURRENT V: ");
+  Serial.println(value_current_voltage,6);
+  Serial.print("CURRENT I(A): ");
+  Serial.println(util_voltage_to_current(value_current_voltage));
+  Serial.println("---");
 
-  MCP342x::Config status; // Return value
-  
-  // Initiate a conversion; convertAndRead() will wait until it can be read
-  uint8_t err = adc.convertAndRead(MCP342x::channel1, MCP342x::oneShot,MCP342x::resolution18, MCP342x::gain1,1000000, value, status);
+  double value_temp_voltage = adc_read_voltage(&adc_temp,MCP342x::channel1,5);
+  Serial.print("TEMP V: ");
+  Serial.println(value_temp_voltage);
+  Serial.print("TEMP Cdeg: ");
+  Serial.println(util_voltage_to_temperature(value_temp_voltage));
+  Serial.println("---");  
 
-  if (err)
-  {
-    Serial.print("Convert error: ");
-    Serial.println(err);
-  }
-  else
-  {
-    Serial.print("Value: ");
-    Serial.println(value);
-  }
 
   delay(1000);
 }
