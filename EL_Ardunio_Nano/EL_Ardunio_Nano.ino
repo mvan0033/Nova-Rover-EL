@@ -46,8 +46,8 @@ LiquidCrystal_I2C lcd(lcdAddress, 128, 64);
 // ISR for when a turn is detected from the rotary encoder
 void isr0()
 {
-  turnDetected = true;
-  clockwise = digitalRead(rotary_encoder_clk) != digitalRead(rotary_encoder_dt);
+    turnDetected = true;
+    clockwise = digitalRead(rotary_encoder_clk) != digitalRead(rotary_encoder_dt);
     Serial.print("\nTurn detected!\n");
 //  Serial.print(clockwise);
 }
@@ -126,21 +126,21 @@ void loop()
 
 
       
-     case 2: // Current mode menu
-     {
+      case 2: // Current mode menu
+      {
         optionSelection(3, 0, false);
         break;
       }
 
 
-     case 3: // Power mode menu
-     {
+      case 3: // Power mode menu
+      {
         optionSelection(3, 0, false);
         break;
-     }
+      }
 
-     case 4: // Adjusting current
-     {
+      case 4: // Adjusting current
+      { 
         if (clockwise)
         {
           selectedDigitValue = (selectedDigitValue + 1) % 10;
@@ -149,22 +149,29 @@ void loop()
         {
           selectedDigitValue = (selectedDigitValue - 1) % 10;
         }     
-     }
-     case 5:
-     {
-     
-     }
-     case 6:
-     {
-       optionSelection(3, 1, false);
-       break;
-     }
+      }
+      case 5:
+      {
+          // Increase flashing digit
+          if (clockwise)
+          {
+            selectedDigitValue = (selectedDigitValue + 1) % 10;
+          }
+          else
+          {
+            selectedDigitValue = (selectedDigitValue - 1) % 10;
+          }
+      }
+      case 6:
+      {
+        optionSelection(3, 1, false);
+        break;
+      }
 
-     case 7:
-     {
-      optionSelection(3, 1, true);  
-     }
-      
+      case 7:
+      {
+        optionSelection(3, 1, true);  
+      }
     }
     turnDetected = false;
   }
@@ -577,13 +584,13 @@ void optionSelection(int numOptions, int rowOffset, bool row1Overflow)
 
   if (row1Overflow && cursorPosition == 0)
   {
-    lcd.setCursor(0, 0);
-    lcd.write(byte(62));
+      lcd.setCursor(0, 0);
+      lcd.write(byte(62));
   }
   else
   {
-    lcd.setCursor(cursorPosition + rowOffset, 0);
-    lcd.write(byte(62));
+      lcd.setCursor(cursorPosition + rowOffset, 0);
+      lcd.write(byte(62));
   }
 }
 

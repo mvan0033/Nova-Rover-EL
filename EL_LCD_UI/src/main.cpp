@@ -14,6 +14,7 @@ volatile bool clockwise;
 volatile bool turnDetected = false;
 volatile bool buttonPressed = false;
 
+// Variables for displaying power value
 int powerDigit1 = 0;
 int powerDigit2 = 8;
 int powerDigit3 = 0;
@@ -21,6 +22,7 @@ int powerDigit4 = 0;
 int powerDecimalPlace = 0;
 float power;
 
+// Variables for displaying current values
 int currentDigit1 = 0;
 int currentDigit2 = 0;
 int currentDigit3 = 0;
@@ -28,6 +30,7 @@ int currentDigit4 = 0;
 int currentDecimalPlace = 0;
 float current = 10.00;
 
+// 
 float curCurrent = 0;
 float curPower = 0;
 float lowVolt = 0;
@@ -43,9 +46,10 @@ bool dataLogging = false;
 bool powerMode;
 bool nextDigit = false;
 
-
+// Creating LCD object
 LiquidCrystal_I2C lcd(lcdAddress, 128, 64);
 
+// Start up screen
 void screen0() 
 {
   lcd.clear();
@@ -59,6 +63,7 @@ void screen0()
   lcd.print("ELECTRONIC LOAD");
 }
 
+// Current/power mode selection
 void screen1()
 {
   lcd.clear();
@@ -68,8 +73,11 @@ void screen1()
   lcd.print("Power Mode");
 }
 
+// Setting current value
 void screen2()
 {
+  current = currentDigit1*pow(10, currentDecimalPlace) + currentDigit2*pow(10, currentDecimalPlace - 1) + currentDigit3*pow(10, currentDecimalPlace - 2);
+  
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Curr:");
@@ -84,6 +92,7 @@ void screen2()
   lcd.write(byte(62));
 }
 
+// Setting power value
 void screen3()
 {
   power = powerDigit1*pow(10, powerDecimalPlace) + powerDigit2*pow(10, powerDecimalPlace - 1) + powerDigit3*pow(10, powerDecimalPlace - 2);
@@ -91,15 +100,17 @@ void screen3()
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Power:");
-  //lcd.setCursor(, 0);
   lcd.print(power);
   lcd.print("W");
   lcd.setCursor(1, 1);
   lcd.print("Next");
   lcd.setCursor(2, 1);
   lcd.print("Back");
+  lcd.setCursor(0, 0);
+  lcd.write(byte(62));
 }
 
+// Adjusting current
 void screen4() 
 {
   lcd.clear();
@@ -109,6 +120,7 @@ void screen4()
   lcd.print("A");
 }
 
+// Adjusting power
 void screen5() 
 {
   lcd.clear();
@@ -118,6 +130,7 @@ void screen5()
   lcd.print("W");
 }
 
+// Prompt user for data logging
 void screen6() 
 {
   lcd.clear();
@@ -131,6 +144,7 @@ void screen6()
   lcd.print("Back");
 }
 
+// Prompt user for low-voltage cut-off
 void screen7() 
 {
   lcd.clear();
@@ -146,6 +160,7 @@ void screen7()
   lcd.print("Back");
 }
 
+// Adjusting low-voltage cut-off
 void screen8() 
 {
   lcd.clear();
@@ -158,6 +173,7 @@ void screen8()
   lcd.print("V");
 }
 
+// Display system monitor for current
 void screen9()
 {
   lcd.clear();
@@ -182,6 +198,7 @@ void screen9()
   lcd.print("END");
 }
 
+// Display system monitor for power
 void screen10()
 {
   lcd.clear();
@@ -206,6 +223,7 @@ void screen10()
   lcd.print("END");
 }
 
+// No/invaild SD card
 void screen11()
 {
   lcd.clear();
@@ -218,6 +236,7 @@ void screen11()
   lcd.print("Back");
 }
 
+// Overtemperature error
 void screen12()
 {
   lcd.clear();
@@ -227,6 +246,7 @@ void screen12()
   lcd.print("ERROR");
 }
 
+// Low-voltage error
 void screen13()
 {
   lcd.clear();
@@ -236,6 +256,7 @@ void screen13()
   lcd.print("CUT-OFF TERMINATION");
 }
 
+// Analysis complete
 void screen14()
 {
   lcd.clear();
@@ -410,7 +431,7 @@ void loop()
      {
         optionSelection(3, 0, false);
         break;
-      }
+     }
 
 
      case 3: // Power mode menu
@@ -457,7 +478,6 @@ void loop()
     switch (screen)
     {
 
-      
       case 1: // Current/Power selection screen
       {
         if (currentSelection == 1) // If power mode is selected
@@ -474,8 +494,6 @@ void loop()
         }
         break;
       }
-
-
       
       case 2: // Current mode screen
       {
@@ -541,6 +559,51 @@ void loop()
         {
           case 1: // Tens digit
           {
+            flashDigit(currentDigit1, 1, 3, ":", true);
+            buttonPressed = false;
+            break;
+          }
+          case 2: // Units digit
+          {
+            flashDigit(currentDigit2, 1, 4, ".", false);
+            buttonPressed = false;
+            break;
+          }
+          case 3: // Tenths digit
+          {
+            char buffer[2];
+            itoa(currentDigit4, buffer, 10);
+            flashDigit(currentDigit3, 1, 5, buffer, false);
+            buttonPressed = false;
+            break;
+          }
+          case 4: // Hundredth digit
+          {
+            char buffer[2];
+            itoa(currentDigit3, buffer, 10);
+            flashDigit(currentDigit4, 1, 5, buffer, true);
+            buttonPressed = false;
+            break;
+          }
+          default:
+          {
+            screen2();
+            screen = 2;
+            selectedDigit = 0;
+          }
+        }
+        // Flash digit & move along
+        break;
+      }
+
+      case 5:
+      {
+        selectedDigit++;
+
+        switch (selectedDigit)
+        {
+          case 1: // Tens digit
+          {
             buttonPressed = false;
             flashDigit(currentDigit1, 1, 3, ":", true);
             break;
@@ -574,12 +637,6 @@ void loop()
             selectedDigit = 0;
           }
         }
-        // Flash digit & move along
-        break;
-      }
-
-      case 5:
-      {
         // Flash digit & move along
         break;
       }
@@ -652,6 +709,8 @@ void loop()
         break;
       }
     }
+
+
     if (!nextDigit)
     {
       buttonPressed = false;
