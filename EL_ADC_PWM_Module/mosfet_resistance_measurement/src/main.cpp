@@ -31,8 +31,9 @@ MCP342x adc_temperature = MCP342x(adc_temp_addr);
 MCP342x adc_current = MCP342x(adc_current_addr);
 
 // Global variables.
-double voltageDividerInputV = 5;
-double topResistorValue = 4673;
+double current_voltageRef = 2.468776;
+
+void set_mosfet_pwm(uint16_t pwmValue);
 
 void setup(void)
 {
@@ -45,6 +46,7 @@ void setup(void)
   pwmModule.write();
   pwmModule.simpleSetBrightness(127);
   pwmModule.write();
+  set_mosfet_pwm(0);
   Serial.println("Done.");
 
   // Reset devices
@@ -72,6 +74,21 @@ void setup(void)
       ;;
     }
   }
+
+  // Calibrate the zero voltage reference
+  current_voltageRef = 0;
+  Serial.println("Calibrating CURRENT SENSOR voltage reference.");
+
+  for(int i =0; i<25; i++)  
+  {
+    double temp = adc_read_voltage(&adc_current,MCP342x::channel1,5);
+    current_voltageRef += temp/25;
+    Serial.print(i);
+    Serial.println("/25");
+  }
+  Serial.print("CURRENT SENSOR VREF: ");
+  Serial.println(current_voltageRef,6);
+
 }
 
 void set_mosfet_pwm(uint16_t pwmValue)
@@ -94,37 +111,39 @@ void set_mosfet_pwm(uint16_t pwmValue)
   delay(10);
 }
 
-uint16_t pwmValue = 0;
+uint16_t pwmValue = 48000;
 
 void loop(void)
 {
   set_mosfet_pwm(pwmValue);
-  // Serial.print("PWM VALUE: ");
-  Serial.print(pwmValue);
-  Serial.print(",");
+  Serial.print("PWM VALUE: ");
+  Serial.println(pwmValue);
+  // Serial.print(",");
   // Serial.println("---");
 
   // Read using convenience functions
   double value_mosfet_voltage = adc_read_voltage(&adc_current,MCP342x::channel1,5);
-  // Serial.print("MOSFET DIVIDER V: ");
+  // Serial.print("CURRENT V: ");
   // Serial.println(value_mosfet_voltage,6);
-  // Serial.print("MOSFET R(Ohm): ");
-  Serial.print(util_voltage_divider_find_resistance(voltageDividerInputV,value_mosfet_voltage,topResistorValue),12);
-  Serial.print(",");
+  Serial.print("MOSFET Current(A): ");
+  Serial.println(util_voltage_to_current(value_mosfet_voltage,current_voltageRef),6);
+  // Serial.print(",");
 
   // Also monitor temperature for fun.
   double value_temp_voltage = adc_read_voltage(&adc_temperature,MCP342x::channel1,5);
   // Serial.print("TEMP V: ");
   // Serial.println(value_temp_voltage);
-  // Serial.print("TEMP Cdeg: ");
+  Serial.print("TEMP Cdeg: ");
   Serial.print(util_voltage_to_temperature(value_temp_voltage),1);
   Serial.println("");
-  // Serial.println("---");  
+  Serial.println("");  
 
-  pwmValue += 100;
-  if(pwmValue > 65535)
-  {
-    pwmValue = 0;
-  }
-  // delay(1000);
+  // pwmValue += 100;
+  // if(pwmValue > 65535)
+  // {
+    // pwmValue = 0;
+  // }
+
+  delay(1000);
+
 }
