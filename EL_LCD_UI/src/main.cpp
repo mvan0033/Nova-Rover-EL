@@ -16,7 +16,7 @@ volatile bool buttonPressed = false;
 
 // Variables for displaying power value
 int powerDigit1 = 0;
-int powerDigit2 = 8;
+int powerDigit2 = 0;
 int powerDigit3 = 0;
 int powerDigit4 = 0;
 int powerDecimalPlace = 0;
@@ -28,12 +28,18 @@ int currentDigit2 = 0;
 int currentDigit3 = 0;
 int currentDigit4 = 0;
 int currentDecimalPlace = 0;
-float current = 10.00;
+float current = 35.00;
+
+// Variables for displaying low voltage values
+int lowVoltageDigit1 = 0;
+int lowVoltageDigit2 = 0;
+int lowVoltageDigit3 = 0;
+int lowVoltageDecimalPlace = 0;
+float lowVoltage = 12.00;
 
 // 
 float curCurrent = 0;
 float curPower = 0;
-float lowVolt = 0;
 float hotTemp = 0;
 int elapsedTime = 0;
 int lcdAddress = 0x27;
@@ -81,15 +87,25 @@ void screen2()
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Curr:");
-  lcd.print(current);
-  lcd.setCursor(0, 6);
+
+  // Padding the number
+  if (current < 10)
+  {
+      lcd.print("0"); 
+      lcd.print(current, 2);
+  }
+  else 
+  {
+      lcd.print(current);
+  }
+  
   lcd.print("A");
   lcd.setCursor(1, 1);
   lcd.print("Next");
   lcd.setCursor(2, 1);
   lcd.print("Back");
   lcd.setCursor(0, 0);
-  lcd.write(byte(62));
+  lcd.write(byte(62)); // Print an empy character
 }
 
 // Setting power value
@@ -100,14 +116,25 @@ void screen3()
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Power:");
-  lcd.print(power);
+
+  // Padding the number
+  if (power < 10)
+  {
+      lcd.print("0"); 
+      lcd.print(power, 2);
+  }
+  else 
+  {
+      lcd.print(power);
+  }
+
   lcd.print("W");
   lcd.setCursor(1, 1);
   lcd.print("Next");
   lcd.setCursor(2, 1);
   lcd.print("Back");
   lcd.setCursor(0, 0);
-  lcd.write(byte(62));
+  lcd.write(byte(62)); // Print an empy character
 }
 
 // Adjusting current
@@ -116,7 +143,18 @@ void screen4()
   lcd.clear();
   lcd.setCursor(1, 1);
   lcd.print("Curr:");
-  lcd.print(current);
+
+  // Padding the number
+  if (current < 10)
+  {
+      lcd.print("0"); 
+      lcd.print(current, 2);
+  }
+  else 
+  {
+      lcd.print(current);
+  }
+
   lcd.print("A");
 }
 
@@ -126,7 +164,18 @@ void screen5()
   lcd.clear();
   lcd.setCursor(1, 1);
   lcd.print("Power:");
-  lcd.print(power);
+
+  // Padding the number
+  if (power < 10)
+  {
+      lcd.print("0"); 
+      lcd.print(power, 2);
+  }
+  else 
+  {
+      lcd.print(power);
+  }
+
   lcd.print("W");
 }
 
@@ -147,12 +196,25 @@ void screen6()
 // Prompt user for low-voltage cut-off
 void screen7() 
 {
+  lowVoltage = lowVoltageDigit1*pow(10, lowVoltageDecimalPlace) + lowVoltageDigit2*pow(10, lowVoltageDecimalPlace - 1) + lowVoltageDigit3*pow(10, lowVoltageDecimalPlace - 2);
+
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Low Voltage");
   lcd.setCursor(1, 1);
   lcd.print("Cut-off:");
-  lcd.print(lowVolt);
+
+  // Padding the number
+  if (lowVoltage < 10)
+  {
+      lcd.print("0");
+      lcd.print(lowVoltage, 1);
+  }
+  else
+  {
+      lcd.print(lowVoltage, 1);
+  }
+  
   lcd.print("V");
   lcd.setCursor(2, 1);
   lcd.print("Start");
@@ -169,7 +231,18 @@ void screen8()
   lcd.setCursor(1, 1);
   lcd.print("Cut-off:");
   lcd.setCursor(2, 1);
-  lcd.print(lowVolt);
+
+  // Padding the number
+  if (lowVoltage < 10)
+  {
+      lcd.print("0");
+      lcd.print(lowVoltage, 1);
+  }
+  else
+  {
+      lcd.print(lowVoltage, 1);
+  }
+
   lcd.print("V");
 }
 
@@ -313,7 +386,14 @@ void optionSelection(int numOptions, int rowOffset, bool row1Overflow)
   }
 }
 
-void flashDigit(int digit, int row, int col, char *string, bool before)
+// Function to flash a digit that indicates the currently selected digit
+// Params
+//  digit: the digit to be flashed
+//  row: the row of the digit on the LCD screen
+//  col: the column of the digit on the LCD screen
+//  string: a string that is printed to the LCD screen either before the digit is flashed or after
+//  before: specifes whether string is printed before or after 
+void flashDigit(int digit, int row, int col, const char *string, bool before)
 {
   bool digitFlashIteration = true;
   while (!turnDetected && !buttonPressed)
@@ -474,6 +554,7 @@ void loop()
   {
     Serial.print(currentSelection);
     nextDigit = false;
+    buttonPressed = false;
     delay(1000);
     switch (screen)
     {
@@ -485,6 +566,7 @@ void loop()
           screen3();
           screen = 3;
           powerMode = true;
+          currentSelection = 0;
         }
         else // If current mode is selected
         {
@@ -527,9 +609,9 @@ void loop()
       {
         switch (currentSelection)
         {
-          case 0: // Set current
+          case 0: // Set power
           {
-            // Display current changing screen
+            // Display power changing screen
             screen5();
             screen = 5; 
             break;
@@ -553,6 +635,7 @@ void loop()
 
       case 4: // Change current screen
       {
+        // Flash digit & move along
         selectedDigit++;
 
         switch (selectedDigit)
@@ -560,13 +643,11 @@ void loop()
           case 1: // Tens digit
           {
             flashDigit(currentDigit1, 1, 3, ":", true);
-            buttonPressed = false;
             break;
           }
           case 2: // Units digit
           {
             flashDigit(currentDigit2, 1, 4, ".", false);
-            buttonPressed = false;
             break;
           }
           case 3: // Tenths digit
@@ -574,7 +655,6 @@ void loop()
             char buffer[2];
             itoa(currentDigit4, buffer, 10);
             flashDigit(currentDigit3, 1, 5, buffer, false);
-            buttonPressed = false;
             break;
           }
           case 4: // Hundredth digit
@@ -582,7 +662,6 @@ void loop()
             char buffer[2];
             itoa(currentDigit3, buffer, 10);
             flashDigit(currentDigit4, 1, 5, buffer, true);
-            buttonPressed = false;
             break;
           }
           default:
@@ -592,52 +671,51 @@ void loop()
             selectedDigit = 0;
           }
         }
-        // Flash digit & move along
+        
         break;
       }
 
       case 5: // Change power screen
       {
+        // Flash digit & move along
         selectedDigit++;
 
         switch (selectedDigit)
         {
           case 1: // Tens digit
           {
-            buttonPressed = false;
-            flashDigit(currentDigit1, 1, 3, ":", true);
+            char buffer[2];
+            itoa(currentDigit2, buffer, 10);
+            flashDigit(currentDigit1, 1, 4, buffer, false);
             break;
           }
           case 2: // Units digit
           {
-            buttonPressed = false;
-            flashDigit(currentDigit2, 1, 4, ".", false);
+            char buffer[2];
+            itoa(currentDigit1, buffer, 10);
+            flashDigit(currentDigit2, 1, 4, buffer, true);
             break;
           }
           case 3: // Tenths digit
           {
-            buttonPressed = false;
-            char buffer[2];
-            itoa(currentDigit4, buffer, 10);
-            flashDigit(currentDigit3, 1, 5, buffer, false);
+            flashDigit(currentDigit3, 1, 5, ".", true);
             break;
           }
           case 4: // Hundredth digit
           {
-            buttonPressed = false;
             char buffer[2];
             itoa(currentDigit3, buffer, 10);
-            flashDigit(currentDigit4, 1, 5, buffer, true);
+            flashDigit(currentDigit4, 1, 6, "W", false);
             break;
           }
           default:
           {
-            screen2();
-            screen = 2;
+            screen3();
+            screen = 3;
             selectedDigit = 0;
           }
         }
-        // Flash digit & move along
+        
         break;
       }
 
@@ -707,13 +785,46 @@ void loop()
         }
         break;
       }
+    
+      case 8: // Low voltage cut-off adjustment screen 
+      {
+        // Flash digit & move along
+        selectedDigit++;
+
+        switch (selectedDigit)
+        {
+          case 1: // Tens digit
+          {
+            char buffer[2];
+            itoa(lowVoltageDigit2, buffer, 10);
+            flashDigit(lowVoltageDigit1, 2, 1, buffer, false);
+            break;
+          }
+          case 2: // Units digit
+          {
+            char buffer[2];
+            itoa(lowVoltageDigit1, buffer, 10);
+            flashDigit(lowVoltageDigit2, 2, 1, buffer, true);
+            break;
+          }
+          case 3: // Tenths digit
+          {
+            flashDigit(lowVoltageDigit3, 2, 2, ".", true);
+            break;
+          }
+          default:
+          {
+            screen7();
+            screen = 7;
+            selectedDigit = 0;
+          }
+        }
+
+        break;
+      }
+    
     }
 
-
-    if (!nextDigit)
-    {
-      buttonPressed = false;
-    }
   }
 }
 
