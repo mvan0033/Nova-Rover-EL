@@ -523,7 +523,7 @@ void loop()
         break;
       }
       
-      case 3:
+      case 3: // Power mode screen
       {
         switch (currentSelection)
         {
@@ -551,7 +551,7 @@ void loop()
         break;
       }
 
-      case 4:
+      case 4: // Change current screen
       {
         selectedDigit++;
 
@@ -596,7 +596,7 @@ void loop()
         break;
       }
 
-      case 5:
+      case 5: // Change power screen
       {
         selectedDigit++;
 
@@ -642,7 +642,7 @@ void loop()
       }
 
       
-      case 6:
+      case 6: // Data logging? screen
       {
         Serial.print(currentSelection);
         switch (currentSelection)
@@ -679,8 +679,7 @@ void loop()
       }
 
 
-      
-      case 7:
+      case 7: // Low voltage cut-off screen
       {
         switch (currentSelection)
         {
