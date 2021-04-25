@@ -391,9 +391,9 @@ void setup()
  lcd.backlight();
 
  // Initalising pins
- pinMode(rotary_encoder_clk, INPUT);
- pinMode(rotary_encoder_dt, INPUT);
- pinMode(rotary_encoder_sw, INPUT);
+ pinMode(rotary_encoder_clk, INPUT_PULLUP);
+ pinMode(rotary_encoder_dt, INPUT_PULLUP);
+ pinMode(rotary_encoder_sw, INPUT_PULLUP);
 
  // Setting up ISR for rotary encoder button
  PCICR |= 0b00000100;

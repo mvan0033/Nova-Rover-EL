@@ -1,16 +1,17 @@
 {
 	"folders": [
 		{
-			"path": "..\\..\\EL_Ardunio_Nano"
-		},
-		{
-			"name": "210405-203842-nanoatmega328",
-			"path": "C:\\Users\\mvanwijk\\OneDrive - Monash University\\Documents\\PlatformIO\\Projects\\210405-203842-nanoatmega328"
+			"path": "../.."
 		},
 		{
 			"name": "EL_LCD_UI",
 			"path": ".."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"__locale": "cpp",
+			"locale": "cpp"
+		}
+	}
 }
