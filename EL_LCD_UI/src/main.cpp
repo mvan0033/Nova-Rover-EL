@@ -1,8 +1,10 @@
+// Initially set power limit to 100W
 // Importing
 #include "LiquidCrystal_I2C.h"
 #include <Wire.h>
 #include <math.h>
 #include <Arduino.h>
+#include <SPI.h>
 
 // Global variables
 // Defining Pins
@@ -15,27 +17,27 @@ volatile bool turnDetected = false;
 volatile bool buttonPressed = false;
 
 // Variables for displaying power value
-int powerDigit1 = 0;
-int powerDigit2 = 0;
-int powerDigit3 = 0;
-int powerDigit4 = 0;
-int powerDecimalPlace = 0;
-float power;
+int powerDigit1 = 1; // Tens digit 
+int powerDigit2 = 0; // Units digit
+// int powerDigit3 = 0; // Tenths digit
+// int powerDigit4 = 0; // Hundredth digit
+// int powerDecimalPlace = 0;
+int power;
 
 // Variables for displaying current values
-int currentDigit1 = 0;
-int currentDigit2 = 0;
-int currentDigit3 = 0;
-int currentDigit4 = 0;
-int currentDecimalPlace = 0;
-float current = 35.00;
+int currentDigit1 = 1; // Tens digit
+int currentDigit2 = 0; // Units digit
+// int currentDigit3 = 0; // Tenths digit
+// int currentDigit4 = 0; // Hundredth digit
+// int currentDecimalPlace = 0;
+int current;
 
 // Variables for displaying low voltage values
-int lowVoltageDigit1 = 0;
-int lowVoltageDigit2 = 0;
-int lowVoltageDigit3 = 0;
+int lowVoltageDigit1 = 0; // Tens digit
+int lowVoltageDigit2 = 0; // Units digit
+int lowVoltageDigit3 = 0; // Tenths digit
 int lowVoltageDecimalPlace = 0;
-float lowVoltage = 12.00;
+float lowVoltage;
 
 // 
 float curCurrent = 0;
@@ -50,7 +52,7 @@ int selectedDigitValue = 0;
 int selectedDigit = 0;
 bool dataLogging = false; 
 bool powerMode;
-bool nextDigit = false;
+// bool nextDigit = false;
 
 // Creating LCD object
 LiquidCrystal_I2C lcd(lcdAddress, 128, 64);
@@ -82,22 +84,25 @@ void screen1()
 // Setting current value
 void screen2()
 {
-  current = currentDigit1*pow(10, currentDecimalPlace) + currentDigit2*pow(10, currentDecimalPlace - 1) + currentDigit3*pow(10, currentDecimalPlace - 2);
+  // Calculate current value
+  current = currentDigit1*pow(10, 1) + currentDigit2;
   
+  // Set up screen
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Curr:");
 
+  lcd.print(current);
   // Padding the number
-  if (current < 10)
-  {
-      lcd.print("0"); 
-      lcd.print(current, 2);
-  }
-  else 
-  {
-      lcd.print(current);
-  }
+  // if (current < 10)
+  // {
+  //     lcd.print("0"); 
+  //     lcd.print(current, 2);
+  // }
+  // else 
+  // {
+  //     lcd.print(current);
+  // }
   
   lcd.print("A");
   lcd.setCursor(1, 1);
@@ -105,28 +110,31 @@ void screen2()
   lcd.setCursor(2, 1);
   lcd.print("Back");
   lcd.setCursor(0, 0);
-  lcd.write(byte(62)); // Print an empy character
+  lcd.write(byte(62)); // Print an empty character
 }
 
 // Setting power value
 void screen3()
 {
-  power = powerDigit1*pow(10, powerDecimalPlace) + powerDigit2*pow(10, powerDecimalPlace - 1) + powerDigit3*pow(10, powerDecimalPlace - 2);
+  // Calculate power value
+  power = powerDigit1*pow(10, 1) + powerDigit2;
   
+  // Set up screen
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Power:");
 
+  lcd.print(power);
   // Padding the number
-  if (power < 10)
-  {
-      lcd.print("0"); 
-      lcd.print(power, 2);
-  }
-  else 
-  {
-      lcd.print(power);
-  }
+  // if (power < 10)
+  // {
+  //     lcd.print("0"); 
+  //     lcd.print(power, 2);
+  // }
+  // else 
+  // {
+  //     lcd.print(power);
+  // }
 
   lcd.print("W");
   lcd.setCursor(1, 1);
@@ -134,48 +142,34 @@ void screen3()
   lcd.setCursor(2, 1);
   lcd.print("Back");
   lcd.setCursor(0, 0);
-  lcd.write(byte(62)); // Print an empy character
+  lcd.write(byte(62)); // Print an empty character
 }
 
 // Adjusting current
 void screen4() 
 {
+  // Calculate current value
+  current = currentDigit1*pow(10, 1) + currentDigit2;
+
+  // Set up screen
   lcd.clear();
   lcd.setCursor(1, 1);
   lcd.print("Curr:");
-
-  // Padding the number
-  if (current < 10)
-  {
-      lcd.print("0"); 
-      lcd.print(current, 2);
-  }
-  else 
-  {
-      lcd.print(current);
-  }
-
+  lcd.print(current);
   lcd.print("A");
 }
 
 // Adjusting power
 void screen5() 
 {
+  // Calculate power value
+  power = powerDigit1*pow(10, 1) + powerDigit2;
+
+  // Set up screen
   lcd.clear();
   lcd.setCursor(1, 1);
   lcd.print("Power:");
-
-  // Padding the number
-  if (power < 10)
-  {
-      lcd.print("0"); 
-      lcd.print(power, 2);
-  }
-  else 
-  {
-      lcd.print(power);
-  }
-
+  lcd.print(power);
   lcd.print("W");
 }
 
@@ -196,8 +190,10 @@ void screen6()
 // Prompt user for low-voltage cut-off
 void screen7() 
 {
-  lowVoltage = lowVoltageDigit1*pow(10, lowVoltageDecimalPlace) + lowVoltageDigit2*pow(10, lowVoltageDecimalPlace - 1) + lowVoltageDigit3*pow(10, lowVoltageDecimalPlace - 2);
+  // Calculate low voltage value
+  lowVoltage = lowVoltageDigit1*pow(10, 1) + lowVoltageDigit2 + lowVoltageDigit3*pow(10, -1);
 
+  // Set up screen
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Low Voltage");
@@ -225,6 +221,10 @@ void screen7()
 // Adjusting low-voltage cut-off
 void screen8() 
 {
+  // Calculate low voltage value
+  lowVoltage = lowVoltageDigit1*pow(10, 1) + lowVoltageDigit2 + lowVoltageDigit3*pow(10, -1);
+
+  // Set up screen
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Low Voltage");
@@ -341,6 +341,16 @@ void screen14()
   lcd.print("REMOVE SD CARD");
 }
 
+// Early termination
+void screen15()
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("ANALYSIS");
+  lcd.setCursor(1, 0);
+  lcd.print("TERMINATED");
+}
+
 // Function to display set the current/power and display on the LCD
 void setPowerCurrent(int powerCurrent)
 {
@@ -353,12 +363,12 @@ void optionSelection(int numOptions, int rowOffset, bool row1Overflow)
   if (row1Overflow && cursorPosition == 0)
   {
     lcd.setCursor(0, 0);
-    lcd.write(byte(32));
+    lcd.write(byte(32)); // Empty character
   }
   else
   {
     lcd.setCursor(cursorPosition + rowOffset, 0);
-    lcd.write(byte(32));
+    lcd.write(byte(32)); // Empty character
   }
 
   
@@ -369,20 +379,20 @@ void optionSelection(int numOptions, int rowOffset, bool row1Overflow)
   }
   else
   {
-      cursorPosition = (cursorPosition - 1) % numOptions;
-      cursorPosition = cursorPosition < 0 ? numOptions + cursorPosition : cursorPosition;
+      cursorPosition = (cursorPosition + numOptions - 1) % numOptions;
+      // cursorPosition = cursorPosition < 0 ? numOptions + cursorPosition : cursorPosition;
       currentSelection = cursorPosition;
   }
 
   if (row1Overflow && cursorPosition == 0)
   {
     lcd.setCursor(0, 0);
-    lcd.write(byte(62));
+    lcd.write(byte(62)); // Arrow character
   }
   else
   {
     lcd.setCursor(cursorPosition + rowOffset, 0);
-    lcd.write(byte(62));
+    lcd.write(byte(62)); // Arrow character
   }
 }
 
@@ -428,7 +438,7 @@ void flashDigit(int digit, int row, int col, const char *string, bool before)
       }
       digitFlashIteration = true;
     }
-    delay(350);
+    delay(250);
   }
 
   lcd.setCursor(row, col);
@@ -442,16 +452,29 @@ void flashDigit(int digit, int row, int col, const char *string, bool before)
     lcd.print(digit);
     lcd.print(string);
   }
-  nextDigit = true;
+  // nextDigit = true;
+}
+
+// Function to increment or decrement a specific digit when setting power/current/low-voltage values
+void changeDigit(int *digitToChange)
+{
+    if (clockwise) // If turn is clockwise
+    {
+      *digitToChange = (*digitToChange + 1) % 10; // Increment
+    }
+    else
+    {
+      *digitToChange = (*digitToChange + 9) % 10; // Decrement
+    } 
 }
 
 // ISR for when a turn is detected from the rotary encoder
 void isr0()
 {
   turnDetected = true;
+
+  // Check direction
   clockwise = digitalRead(rotary_encoder_clk) != digitalRead(rotary_encoder_dt);
-  Serial.print("\nTurn detected!\n");
-//  Serial.print(clockwise);
 }
 
 // ISR for when the button on the rotary encoder is pressed
@@ -460,7 +483,7 @@ ISR(PCINT2_vect)
   if (digitalRead(rotary_encoder_sw) == LOW) 
   {
     buttonPressed = true;
-    Serial.print("\nbutton pressed!\n");
+    // Serial.print("\nbutton pressed!\n");
   }
 }
   
@@ -489,76 +512,193 @@ void setup()
  screen0();
  delay(2500);
  screen1();
- lcd.setCursor(1,0);
- lcd.write(byte(62));
+ lcd.setCursor(0, 0);
+ lcd.write(byte(62)); // 62 is arrow character, 32 is empty character
+//  Serial.print(turnDetected);
+//  Serial.print("\n");
+//  Serial.print(buttonPressed);
 }
 
 void loop() 
 {
+  delay(60);
+  Serial.print(turnDetected);
   if (turnDetected)
   {
-    delay(200);
+    delay(50);
     switch (screen)
     {
-      
-      case 1:
-      {
+     case 1: // Current/Power selection screen
+     {
+        // Change selected option
         optionSelection(2, 0, false);
         break;
       }
-
-     case 2: // Current mode menu
-     {
-        optionSelection(3, 0, false);
-        break;
-     }
-
-
-     case 3: // Power mode menu
-     {
-        optionSelection(3, 0, false);
-        break;
-     }
-
-     case 4: // Adjusting current
-     {
-        if (clockwise)
-        {
-          selectedDigitValue = (selectedDigitValue + 1) % 10;
-        }
-        else
-        {
-          selectedDigitValue = (selectedDigitValue - 1) % 10;
-        }     
-     }
-     case 5:
-     {
      
-     }
-     case 6:
+     case 2: // Current mode menu screen
      {
+        // Change selected option
+        optionSelection(3, 0, false);
+        break;
+     }
+     
+     case 3: // Power mode menu screen
+     {
+        // Change selected option
+        optionSelection(3, 0, false);
+        break;
+     }
+
+     case 4: // Adjusting current screen
+     { 
+        switch (selectedDigit)
+        {
+          case 1:
+          {
+            changeDigit(&currentDigit1);
+            screen4();
+            break;
+          }
+          case 2:
+          {
+            changeDigit(&currentDigit2);
+            screen4();
+            break;
+          }
+          default: 
+          {
+            Serial.print("1. This is an error\n");
+          }
+        }
+        break;   
+     }
+     
+     case 5: // Adjusting power screen
+     {
+       // Change digit
+       switch (selectedDigit)
+        {
+          case 1:
+          {
+            changeDigit(&powerDigit1);
+            screen5();
+            break;
+          }
+          case 2:
+          {
+            changeDigit(&powerDigit2);
+            screen5();
+            break;
+          }
+          default:
+          {
+            Serial.print("2. This is an error\n");
+          }
+        }
+        break;   
+     }
+     
+     case 6: // Data logging? screen
+     {
+       // Change selected option
        optionSelection(3, 1, false);
        break;
      }
 
-     case 7:
+     case 7: // Low voltage cut-off screen
      {
-      optionSelection(3, 1, true);  
+        // Change selected option
+        optionSelection(3, 1, true); 
+        break; 
      }
-      
+
+     case 8: // Low voltage cut-off adjustment screen 
+     {
+        // Change digit
+        switch (selectedDigit)
+        {
+          case 1:
+          {
+            changeDigit(&lowVoltageDigit1);
+            screen8();
+            break;
+          }
+          case 2:
+          {
+            changeDigit(&lowVoltageDigit2);
+            screen8();
+            break;
+          }
+          case 3:
+          {
+            changeDigit(&lowVoltageDigit3);
+            screen8();
+            break;
+          }
+          default:
+          {
+            Serial.print("3. This is an error\n");
+          }
+        }
+        break;
+     }
+
+     case 9: // Current monitor screen
+     {
+       // Do nothing
+       break;
+     }
+
+     case 10: // Power monitor screen
+     {
+       // Do nothing
+       break;
+     }
+
+     case 11: // No/invaid SD card screen
+     {
+       // Do nothing
+       break;
+     }
+
+     case 12: // Overtemperature screen
+     {
+       // Do nothing
+       break;
+     }
+
+     case 13: // Low-voltage cut-off termination screen
+     {
+       // Do nothing
+       break;
+     }
+     
+     case 14: // Analysis complete screen
+     {
+       // Do nothing
+       break;
+     }
+
+     case 15: // Analysis terminated screen
+     {
+       // Do nothing
+       break;
+     }
     }
+
+    // Reset turnDetected
     turnDetected = false;
   }
-
+  
   if (buttonPressed)
   {
-    Serial.print(currentSelection);
-    nextDigit = false;
+    // nextDigit = false;
+    // Reset buttonPressed
     buttonPressed = false;
-    delay(1000);
+    delay(200);
+
     switch (screen)
     {
-
       case 1: // Current/Power selection screen
       {
         if (currentSelection == 1) // If power mode is selected
@@ -647,21 +787,7 @@ void loop()
           }
           case 2: // Units digit
           {
-            flashDigit(currentDigit2, 1, 4, ".", false);
-            break;
-          }
-          case 3: // Tenths digit
-          {
-            char buffer[2];
-            itoa(currentDigit4, buffer, 10);
-            flashDigit(currentDigit3, 1, 5, buffer, false);
-            break;
-          }
-          case 4: // Hundredth digit
-          {
-            char buffer[2];
-            itoa(currentDigit3, buffer, 10);
-            flashDigit(currentDigit4, 1, 5, buffer, true);
+            flashDigit(currentDigit2, 1, 4, "A", false);
             break;
           }
           default:
@@ -685,29 +811,29 @@ void loop()
           case 1: // Tens digit
           {
             char buffer[2];
-            itoa(currentDigit2, buffer, 10);
-            flashDigit(currentDigit1, 1, 4, buffer, false);
+            itoa(powerDigit2, buffer, 10);
+            flashDigit(powerDigit1, 1, 4, buffer, false);
             break;
           }
           case 2: // Units digit
           {
             char buffer[2];
-            itoa(currentDigit1, buffer, 10);
-            flashDigit(currentDigit2, 1, 4, buffer, true);
+            itoa(powerDigit1, buffer, 10);
+            flashDigit(powerDigit2, 1, 4, buffer, true);
             break;
           }
-          case 3: // Tenths digit
-          {
-            flashDigit(currentDigit3, 1, 5, ".", true);
-            break;
-          }
-          case 4: // Hundredth digit
-          {
-            char buffer[2];
-            itoa(currentDigit3, buffer, 10);
-            flashDigit(currentDigit4, 1, 6, "W", false);
-            break;
-          }
+          // case 3: // Tenths digit
+          // {
+          //   flashDigit(currentDigit3, 1, 5, "", true);
+          //   break;
+          // }
+          // case 4: // Hundredth digit
+          // {
+          //   char buffer[2];
+          //   itoa(currentDigit3, buffer, 10);
+          //   flashDigit(currentDigit4, 1, 6, "W", false);
+          //   break;
+          // }
           default:
           {
             screen3();
@@ -719,10 +845,9 @@ void loop()
         break;
       }
 
-      
       case 6: // Data logging? screen
       {
-        Serial.print(currentSelection);
+        // Serial.print(currentSelection);
         switch (currentSelection)
         {
           case 0:
@@ -755,7 +880,6 @@ void loop()
         }
         break;
       }
-
 
       case 7: // Low voltage cut-off screen
       {
@@ -823,8 +947,59 @@ void loop()
         break;
       }
     
-    }
+      case 9: // Current monitor screen
+      {
+        screen15();
+        screen = 15;
 
+        // TODO: End termination
+        break;
+      }
+
+      case 10: // Power monitor screen
+      {
+        screen15();
+        screen = 15;
+        
+        // TODO: End termination
+        break;
+      }
+
+      case 11: // No/invaid SD card screen
+      {
+        screen6();
+        screen = 6;
+        break;
+      }
+
+      case 12: // Overtemperature screen
+      {
+        screen1();
+        screen = 1;
+        break;
+      }
+
+      case 13: // Low-voltage cut-off termination screen
+      {
+        screen1();
+        screen = 1;
+        break;
+      }
+
+      case 14: // Analysis complete screen
+      {
+        screen1();
+        screen = 1;
+        break;
+      }
+
+      case 15: // Analysis terminated screen
+      {
+        screen1();
+        screen = 1;
+        break;
+      }
+    }
   }
 }
 
