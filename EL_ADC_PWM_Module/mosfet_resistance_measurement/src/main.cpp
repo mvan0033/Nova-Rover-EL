@@ -13,10 +13,10 @@ We will then be able to obtain a nice PWM vs MOSFET resistance curve, at a V_DS 
 #include <utils.h>
 #include <adc_utils.h>
 
+
+
 #include "Adafruit_TLC59711.h"
 #include <SPI.h>
-
-
 // PWM
 #define NUM_TLC59711 1
 #define data   8
@@ -24,9 +24,12 @@ We will then be able to obtain a nice PWM vs MOSFET resistance curve, at a V_DS 
 uint8_t MOSFET_PWM_CH = 6;
 Adafruit_TLC59711 pwmModule = Adafruit_TLC59711(NUM_TLC59711, clock, data);
 
-// ADCs
-uint8_t adc_temp_addr = 0x69;
-uint8_t adc_current_addr = 0x6B;
+
+
+
+// ADCs (0x68,0x69,0x6B,0x6C)
+uint8_t adc_current_addr = 0x69;
+uint8_t adc_temp_addr = 0x6B;
 MCP342x adc_temperature = MCP342x(adc_temp_addr);
 MCP342x adc_current = MCP342x(adc_current_addr);
 
@@ -111,7 +114,7 @@ void set_mosfet_pwm(uint16_t pwmValue)
   delay(10);
 }
 
-uint16_t pwmValue = 48000;
+uint16_t pwmValue = 0000;
 
 void loop(void)
 {
@@ -138,11 +141,11 @@ void loop(void)
   Serial.println("");
   Serial.println("");  
 
-  // pwmValue += 100;
-  // if(pwmValue > 65535)
-  // {
-    // pwmValue = 0;
-  // }
+  pwmValue += 100;
+  if(pwmValue > 65535)
+  {
+    pwmValue = 0;
+  }
 
   delay(1000);
 

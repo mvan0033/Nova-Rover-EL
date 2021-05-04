@@ -57,7 +57,7 @@ void loop(void)
   Serial.print("CURRENT V: ");
   Serial.println(value_current_voltage,6);
   Serial.print("CURRENT I(A): ");
-  Serial.println(util_voltage_to_current(value_current_voltage));
+  Serial.println(util_voltage_to_current(value_current_voltage,2.5));
   Serial.println("---");
 
   double value_temp_voltage = adc_read_voltage(&adc_temp,MCP342x::channel1,5);
