@@ -46,7 +46,7 @@ float hotTemp = 0;
 int elapsedTime = 0;
 int lcdAddress = 0x27;
 int screen = 1;
-int currentSelection;
+int currentSelection = 0;
 int cursorPosition = 0;
 int selectedDigitValue = 0;
 int selectedDigit = 0;
@@ -79,6 +79,9 @@ void screen1()
   lcd.print("Current Mode");
   lcd.setCursor(1, 1);
   lcd.print("Power Mode");
+  lcd.setCursor(0, 0);
+  lcd.write(byte(62)); // 62 is arrow character, 32 is empty character
+  cursorPosition = 0;
 }
 
 // Setting current value
@@ -91,26 +94,15 @@ void screen2()
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Curr:");
-
   lcd.print(current);
-  // Padding the number
-  // if (current < 10)
-  // {
-  //     lcd.print("0"); 
-  //     lcd.print(current, 2);
-  // }
-  // else 
-  // {
-  //     lcd.print(current);
-  // }
-  
   lcd.print("A");
   lcd.setCursor(1, 1);
   lcd.print("Next");
   lcd.setCursor(2, 1);
   lcd.print("Back");
   lcd.setCursor(0, 0);
-  lcd.write(byte(62)); // Print an empty character
+  lcd.write(byte(62)); // Print an arrow character
+  cursorPosition = 0;
 }
 
 // Setting power value
@@ -123,26 +115,15 @@ void screen3()
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Power:");
-
   lcd.print(power);
-  // Padding the number
-  // if (power < 10)
-  // {
-  //     lcd.print("0"); 
-  //     lcd.print(power, 2);
-  // }
-  // else 
-  // {
-  //     lcd.print(power);
-  // }
-
   lcd.print("W");
   lcd.setCursor(1, 1);
   lcd.print("Next");
   lcd.setCursor(2, 1);
   lcd.print("Back");
   lcd.setCursor(0, 0);
-  lcd.write(byte(62)); // Print an empty character
+  lcd.write(byte(62)); // Print an arrow character
+  cursorPosition = 0;
 }
 
 // Adjusting current
@@ -155,7 +136,18 @@ void screen4()
   lcd.clear();
   lcd.setCursor(1, 1);
   lcd.print("Curr:");
-  lcd.print(current);
+
+  // Padding if necessary
+  if (current < 10)
+  {
+    lcd.print("0");
+    lcd.print(current);
+  }
+  else
+  {
+    lcd.print(current);
+  }
+
   lcd.print("A");
 }
 
@@ -169,7 +161,18 @@ void screen5()
   lcd.clear();
   lcd.setCursor(1, 1);
   lcd.print("Power:");
-  lcd.print(power);
+
+  // Padding if necessary
+  if (power < 10)
+  {
+    lcd.print("0");
+    lcd.print(power);
+  }
+  else
+  {
+    lcd.print(power);
+  }
+
   lcd.print("W");
 }
 
@@ -185,6 +188,9 @@ void screen6()
   lcd.print("No");
   lcd.setCursor(3, 1);
   lcd.print("Back");
+  lcd.setCursor(1, 0);
+  lcd.write(byte(62)); // Print an arrow character
+  cursorPosition = 0;
 }
 
 // Prompt user for low-voltage cut-off
@@ -216,6 +222,9 @@ void screen7()
   lcd.print("Start");
   lcd.setCursor(3, 1);
   lcd.print("Back");
+  lcd.setCursor(0, 0);
+  lcd.write(byte(62)); // Print an arrow character
+  cursorPosition = 0;
 }
 
 // Adjusting low-voltage cut-off
@@ -358,6 +367,9 @@ void setPowerCurrent(int powerCurrent)
 }
 
 // Function for setting the cursor position for any screen that has numOptions options availiable
+// numOptions is the number of options for the current screen
+// rowOffset is the row number for the first option
+// row1Overflow is for a screen with its first option spilling over two rows
 void optionSelection(int numOptions, int rowOffset, bool row1Overflow)
 {
   if (row1Overflow && cursorPosition == 0)
@@ -522,7 +534,7 @@ void setup()
 void loop() 
 {
   delay(60);
-  Serial.print(turnDetected);
+  // Serial.print(turnDetected);
   if (turnDetected)
   {
     delay(50);
@@ -706,7 +718,6 @@ void loop()
           screen3();
           screen = 3;
           powerMode = true;
-          currentSelection = 0;
         }
         else // If current mode is selected
         {
@@ -719,6 +730,7 @@ void loop()
       
       case 2: // Current mode screen
       {
+        Serial.print(currentSelection);
         switch (currentSelection)
         {
           case 0: // Set current
@@ -906,6 +918,13 @@ void loop()
             }
             break;
            }
+
+          case 2:
+          {
+            screen6();
+            screen = 6;
+            break;
+          }
         }
         break;
       }
