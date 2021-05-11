@@ -1,0 +1,81 @@
+/*
+This script will:
+- Increment the PWM output to the MOSFET gate driver, while:
+- Measuring a voltage on CH1 of the Current ADC (Channel 0x6B)
+- And then calculating the equivalent resistance of the MOSFET, as it runs through a voltage divider.
+- I used a Top resistor of 1Meg, with the MOSFET acting as the bottom resistor.
+
+We will then be able to obtain a nice PWM vs MOSFET resistance curve, at a V_DS of 0V.
+*/
+#include <Arduino.h>
+#include <Wire.h>
+#include <MCP342x.h>
+#include <utils.h>
+#include <adc_utils.h>
+
+
+
+#include "Adafruit_TLC59711.h"
+#include <SPI.h>
+// PWM
+#define NUM_TLC59711 1
+#define data   8
+#define clock  7
+uint8_t MOSFET_PWM_CH = 6;
+Adafruit_TLC59711 pwmModule = Adafruit_TLC59711(NUM_TLC59711, clock, data);
+
+void set_mosfet_pwm(uint16_t pwmValue);
+
+void setup(void)
+{
+  Serial.begin(115200);
+  Wire.begin();
+
+  // Setup PWM
+  Serial.print("Setting up PWM module...");
+  pwmModule.begin();
+  pwmModule.write();
+  pwmModule.simpleSetBrightness(127);
+  pwmModule.write();
+  set_mosfet_pwm(0);
+  Serial.println("Done.");
+
+}
+
+void set_mosfet_pwm(uint16_t pwmValue)
+{
+  // SET PWM.
+  uint16_t pwm = 65535 - pwmValue;
+  
+  if(pwm < 0)
+  {
+    pwm = 0;
+  }
+  if(pwm > 65535)
+  {
+    pwm = 65535;
+  }
+
+  pwmModule.setPWM(MOSFET_PWM_CH,pwm);
+  pwmModule.write();
+  // Wait.
+  delay(10);
+}
+
+uint16_t pwmValue = 64550;
+
+void loop(void)
+{
+  set_mosfet_pwm(pwmValue);
+  Serial.print("PWM VALUE: ");
+  Serial.println(pwmValue);
+
+  // pwmValue += 5;
+  // if(pwmValue > 65535)
+  // {
+  //   pwmValue = 60000;
+  // }
+
+  delay(1000);
+
+}

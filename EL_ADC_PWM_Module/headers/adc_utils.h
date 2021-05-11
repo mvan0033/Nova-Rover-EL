@@ -72,7 +72,9 @@ double util_voltage_to_temperature(double voltage)
     return NTC_T - 273.15; // Convert to C
 }
 
-double util_voltage_to_current(double voltage)
+// void util_calibrate_zero_voltage()
+
+double util_voltage_to_current(double voltage,double voltageRef)
 {
     /* 
         Converts a voltage reading from a HLSR-32P current sensor, into a current estimate in Amps.
@@ -80,7 +82,7 @@ double util_voltage_to_current(double voltage)
 
     // Voltage range is 2.5V +/- 0.8V.
     // so we can find a min and max value
-    double V_CENTER = 2.4784; // Stable biased voltage at no current.
+    double V_CENTER = voltageRef; // Stable biased voltage at no current.
 
     double V_MAX = V_CENTER + 0.8;
     double V_MIN = V_CENTER - 0.8;
