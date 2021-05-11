@@ -1,5 +1,11 @@
+/* Program to implement the logic and user interface for an Ardunio Nano on the Monash Nova Rover Electronic Load.
+
+Written by Matt van Wijk
+Date: 11/05/2021
+*/
+
 // Initially set power limit to 100W
-// Importing
+// Header Files
 #include "LiquidCrystal_I2C.h"
 #include <Wire.h>
 #include <math.h>
@@ -39,16 +45,14 @@ int lowVoltageDigit3 = 0; // Tenths digit
 int lowVoltageDecimalPlace = 0;
 float lowVoltage;
 
-// 
+// Misc Variables
 float curCurrent = 0;
 float curPower = 0;
 float hotTemp = 0;
 int elapsedTime = 0;
 int lcdAddress = 0x27;
 int screen = 1;
-int currentSelection = 0;
 int cursorPosition = 0;
-int selectedDigitValue = 0;
 int selectedDigit = 0;
 bool dataLogging = false; 
 bool powerMode;
@@ -61,13 +65,11 @@ LiquidCrystal_I2C lcd(lcdAddress, 128, 64);
 void screen0() 
 {
   lcd.clear();
-  lcd.setCursor(0, 0); // Start of 1st row
+  lcd.setCursor(0, 0);
   lcd.print("MONASH NOVA");
-  lcd.setCursor(1, 0); // Start of 2nd row
+  lcd.setCursor(1, 0); 
   lcd.print("ROVER");
-//  lcd.setCursor(24, 0);
-//  lcd.setCursor(2, 10);
-  lcd.setCursor(2, 0); // Start of 3rd row
+  lcd.setCursor(2, 0);
   lcd.print("ELECTRONIC LOAD");
 }
 
@@ -205,18 +207,7 @@ void screen7()
   lcd.print("Low Voltage");
   lcd.setCursor(1, 1);
   lcd.print("Cut-off:");
-
-  // Padding the number
-  if (lowVoltage < 10)
-  {
-      lcd.print("0");
-      lcd.print(lowVoltage, 1);
-  }
-  else
-  {
-      lcd.print(lowVoltage, 1);
-  }
-  
+  lcd.print(lowVoltage, 1);
   lcd.print("V");
   lcd.setCursor(2, 1);
   lcd.print("Start");
@@ -366,10 +357,15 @@ void setPowerCurrent(int powerCurrent)
   
 }
 
-// Function for setting the cursor position for any screen that has numOptions options availiable
-// numOptions is the number of options for the current screen
-// rowOffset is the row number for the first option
-// row1Overflow is for a screen with its first option spilling over two rows
+/* Function for moving the cursor position 
+ 
+  :pre: 0 <= numOptions <= 4
+  :pre: 0 <= rowOffset <= 4
+  :param numOptions: is the number of options to be displayed for the current screen
+  :param rowOffset: is the row number for the first option
+  :param row1Overflow: Boolean variable for a screen with its first option spilling over two rows
+  :post: the cursor is moved to its next position and printed to the LCD screen
+*/
 void optionSelection(int numOptions, int rowOffset, bool row1Overflow)
 {
   if (row1Overflow && cursorPosition == 0)
@@ -387,13 +383,10 @@ void optionSelection(int numOptions, int rowOffset, bool row1Overflow)
   if (clockwise)
   { 
       cursorPosition = (cursorPosition + 1) % numOptions;
-      currentSelection = cursorPosition;
   }
   else
   {
       cursorPosition = (cursorPosition + numOptions - 1) % numOptions;
-      // cursorPosition = cursorPosition < 0 ? numOptions + cursorPosition : cursorPosition;
-      currentSelection = cursorPosition;
   }
 
   if (row1Overflow && cursorPosition == 0)
@@ -408,21 +401,29 @@ void optionSelection(int numOptions, int rowOffset, bool row1Overflow)
   }
 }
 
-// Function to flash a digit that indicates the currently selected digit
-// Params
-//  digit: the digit to be flashed
-//  row: the row of the digit on the LCD screen
-//  col: the column of the digit on the LCD screen
-//  string: a string that is printed to the LCD screen either before the digit is flashed or after
-//  before: specifes whether string is printed before or after 
+/* Function to flash a digit that indicates the currently selected digit
+
+  :pre: 0 <= row <= 4
+  :pre: 0 <= col <= 8
+  :param digit: the digit to be flashed
+  :param row: the row of the digit on the LCD screen
+  :param col: the column of the digit on the LCD screen
+  :param string: a string that is printed to the LCD screen either before the digit is flashed or after
+  :param before: Boolean variable that specifes whether string is printed before or after (true = before, false = after)
+  :post: the function will be stuck in a loop, flashing digit until either a turn is detected or a button pressed
+*/
 void flashDigit(int digit, int row, int col, const char *string, bool before)
 {
   bool digitFlashIteration = true;
+
+  // Looping until a turn is detected or a button pressed
   while (!turnDetected && !buttonPressed)
   { 
+    // Printing the digit to LCD for this iteration
     if (digitFlashIteration)
     {
       lcd.setCursor(row, col);
+
       if (before)
       {
         lcd.print(string);
@@ -433,11 +434,15 @@ void flashDigit(int digit, int row, int col, const char *string, bool before)
         lcd.print(digit);
         lcd.print(string);
       }
+
       digitFlashIteration = false;
     }
+
+    // Printing an empty space to LCD for this iteration
     else
     {
       lcd.setCursor(row, col);
+
       if (before)
       {
         lcd.print(string);
@@ -448,11 +453,14 @@ void flashDigit(int digit, int row, int col, const char *string, bool before)
         lcd.print(" "); // Print an empty space
         lcd.print(string);
       }
+
       digitFlashIteration = true;
     }
+
     delay(250);
   }
 
+  // Printing the digit to LCD
   lcd.setCursor(row, col);
   if (before)
   {
@@ -464,10 +472,14 @@ void flashDigit(int digit, int row, int col, const char *string, bool before)
     lcd.print(digit);
     lcd.print(string);
   }
-  // nextDigit = true;
 }
 
-// Function to increment or decrement a specific digit when setting power/current/low-voltage values
+/* Function to increment or decrement a specific digit when setting power/current/low-voltage values
+
+  :pre: digitToChange is a pointer to an integer digit 
+  :param digitToChange: a pointer to the currently selected digit that is about to be incremented/decremented
+  :post: digitToChange is modified such that it is either incremented or decremented (depending on turn direction)
+*/
 void changeDigit(int *digitToChange)
 {
     if (clockwise) // If turn is clockwise
@@ -495,7 +507,6 @@ ISR(PCINT2_vect)
   if (digitalRead(rotary_encoder_sw) == LOW) 
   {
     buttonPressed = true;
-    // Serial.print("\nbutton pressed!\n");
   }
 }
   
@@ -526,15 +537,11 @@ void setup()
  screen1();
  lcd.setCursor(0, 0);
  lcd.write(byte(62)); // 62 is arrow character, 32 is empty character
-//  Serial.print(turnDetected);
-//  Serial.print("\n");
-//  Serial.print(buttonPressed);
 }
 
 void loop() 
 {
   delay(60);
-  // Serial.print(turnDetected);
   if (turnDetected)
   {
     delay(50);
@@ -704,7 +711,6 @@ void loop()
   
   if (buttonPressed)
   {
-    // nextDigit = false;
     // Reset buttonPressed
     buttonPressed = false;
     delay(200);
@@ -713,13 +719,15 @@ void loop()
     {
       case 1: // Current/Power selection screen
       {
-        if (currentSelection == 1) // If power mode is selected
+        // If power mode is selected
+        if (cursorPosition == 1) 
         {
           screen3();
           screen = 3;
           powerMode = true;
         }
-        else // If current mode is selected
+        // If current mode is selected
+        else 
         {
           screen2();
           screen = 2;
@@ -730,8 +738,7 @@ void loop()
       
       case 2: // Current mode screen
       {
-        Serial.print(currentSelection);
-        switch (currentSelection)
+        switch (cursorPosition)
         {
           case 0: // Set current
           {
@@ -759,11 +766,10 @@ void loop()
       
       case 3: // Power mode screen
       {
-        switch (currentSelection)
+        switch (cursorPosition)
         {
           case 0: // Set power
           {
-            // Display power changing screen
             screen5();
             screen = 5; 
             break;
@@ -780,7 +786,6 @@ void loop()
             screen = 1;
             break;
           }
-          break;
         }
         break;
       }
@@ -802,14 +807,13 @@ void loop()
             flashDigit(currentDigit2, 1, 4, "A", false);
             break;
           }
-          default:
+          default: // Continue to next screen and reset selectedDigit
           {
             screen2();
             screen = 2;
             selectedDigit = 0;
           }
         }
-        
         break;
       }
 
@@ -846,36 +850,34 @@ void loop()
           //   flashDigit(currentDigit4, 1, 6, "W", false);
           //   break;
           // }
-          default:
+          default: // Continue to next screen and reset selectedDigit
           {
             screen3();
             screen = 3;
             selectedDigit = 0;
           }
         }
-        
         break;
       }
 
       case 6: // Data logging? screen
       {
-        // Serial.print(currentSelection);
-        switch (currentSelection)
+        switch (cursorPosition)
         {
-          case 0:
+          case 0: // Yes
           {
             screen7();
             screen = 7;
             dataLogging = true;
             break;
           }
-          case 1:
+          case 1: // No
           {
             screen7();
             screen = 7;
             break;
           }
-          case 2:
+          case 2: // Back
           {
             if (powerMode)
             {
@@ -895,16 +897,16 @@ void loop()
 
       case 7: // Low voltage cut-off screen
       {
-        switch (currentSelection)
+        switch (cursorPosition)
         {
-          case 0:
+          case 0: // Set Low voltage cut-off
           {
             screen8();
             screen = 8;
             break;
           }
           
-          case 1:
+          case 1: // Start
           {
             if (powerMode)
             {
@@ -919,7 +921,7 @@ void loop()
             break;
            }
 
-          case 2:
+          case 2: // Back
           {
             screen6();
             screen = 6;
@@ -955,14 +957,13 @@ void loop()
             flashDigit(lowVoltageDigit3, 2, 2, ".", true);
             break;
           }
-          default:
+          default: // Continue to next screen and reset selectedDigit
           {
             screen7();
             screen = 7;
             selectedDigit = 0;
           }
         }
-
         break;
       }
     
