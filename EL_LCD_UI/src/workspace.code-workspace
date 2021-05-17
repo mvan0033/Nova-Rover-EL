@@ -1,17 +1,12 @@
 {
 	"folders": [
 		{
-			"path": "../.."
+			"path": "C:\\Users\\mvanwijk\\OneDrive - Monash University\\Monash 2021 Sem 1\\PHS1011\\Assignments\\Assignment 3"
 		},
 		{
 			"name": "EL_LCD_UI",
 			"path": ".."
 		}
 	],
-	"settings": {
-		"files.associations": {
-			"__locale": "cpp",
-			"locale": "cpp"
-		}
-	}
+	"settings": {}
 }
