@@ -11,6 +11,10 @@ Date: 11/05/2021
 #include <math.h>
 #include <Arduino.h>
 #include <SPI.h>
+#include <control_loop.h>
+
+// Control loop object which handles our PWM/ADC hardware.
+ControlLoop controller;
 
 // Global variables
 // Defining Pins
@@ -249,6 +253,10 @@ void screen8()
 // Display system monitor for current
 void screen9()
 {
+  // Set the current mode and output
+  controller.set_target_mode(0);
+  controller.set_target_value(current);
+
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Set:");
@@ -269,11 +277,16 @@ void screen9()
   lcd.setCursor(3, 6);
   lcd.write(byte(62));
   lcd.print("END");
+
+  controller.set_enable(true);
 }
 
 // Display system monitor for power
 void screen10()
 {
+  controller.set_target_mode(0);
+  controller.set_target_value(power);
+
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Set:");
@@ -294,6 +307,8 @@ void screen10()
   lcd.setCursor(3, 6);
   lcd.write(byte(62));
   lcd.print("END");
+
+  controller.set_enable(true);
 }
 
 // No/invaild SD card
@@ -512,6 +527,9 @@ ISR(PCINT2_vect)
   
 void setup()
 {
+  // Setup control loop object (which initialises ADC/PWM hardware)
+  controller.init();
+
  // Initalising LCD
  lcd.init();
  lcd.backlight();
@@ -537,11 +555,35 @@ void setup()
  screen1();
  lcd.setCursor(0, 0);
  lcd.write(byte(62)); // 62 is arrow character, 32 is empty character
+
+ controller.set_enable(false);
 }
 
 void loop() 
 {
+  // Update control loop!
+  controller.update();
+
+
+  // Check error state (true means error)
+  if(controller.get_error_state())
+  {
+    Serial.print("Error on MODULE #");
+    Serial.println(controller.get_error_module());
+    Serial.print("Error type was #");
+    Serial.println(controller.get_error_type());
+
+    // Serial.println("Resetting...");
+    // delay(5000);
+    // controller.reset_errors();
+  }
+  
+  // Update global variables
+  curCurrent = controller.get_total_current();
+  curPower = controller.get_total_power();
+
   delay(60);
+
   if (turnDetected)
   {
     delay(50);

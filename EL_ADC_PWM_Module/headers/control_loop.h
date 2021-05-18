@@ -35,6 +35,8 @@ MCP342x adc_temperature = MCP342x(adc_temperature_addr);
 MCP342x adc_current = MCP342x(adc_current_addr);
 MCP342x adc_voltage = MCP342x(adc_voltage_addr);
 
+int8_t load_voltage_channel = 3; // What channel of the adc_voltage chip, do we find out 0 to 75V LOAD voltage.
+
 class ControlLoop
 {
     public:
@@ -102,6 +104,8 @@ class ControlLoop
             if(result1 != -1)
             {
                 controlLoopError = true;
+                errorType = 0; 
+                errorMOSFET = result1;
                 explain_limit_failure(result1,0);
                 return;
             }
@@ -113,6 +117,8 @@ class ControlLoop
             if(result2 != -1)
             {
                 controlLoopError = true;
+                errorType = 1; 
+                errorMOSFET = result2;
                 explain_limit_failure(result2,1);
                 return;
             }
@@ -124,6 +130,8 @@ class ControlLoop
             if(result3 != -1)
             {
                 controlLoopError = true;
+                errorType = 2; 
+                errorMOSFET = result3;
                 explain_limit_failure(result3,2);
                 return;
             }
@@ -252,6 +260,39 @@ class ControlLoop
         return controlLoopError;
     }
 
+    int8_t get_error_module()
+    {
+        return errorMOSFET;
+    }
+
+    int8_t get_error_type()
+    {
+        return errorType;
+    }
+
+    double get_total_current()
+    {
+        // Return combined current throughput
+        double latestReadings[4] = {0,0,0,0};
+        for(int i = 0; i<4; i++)
+        {
+            latestReadings[i] = readings_current[i]
+        }
+        return latestReadings[0] + latestReadings[1] + latestReadings[2] + latestReadings[3];
+    }
+
+    double get_total_power()
+    {
+        // Return combined power throughput
+        double latestReadings[4] = {0,0,0,0};
+        for(int i = 0; i<4; i++)
+        {
+            latestReadings[i] = readings_current[i] * readings_voltage[load_voltage_channel];
+        }
+
+        return latestReadings[0] + latestReadings[1] + latestReadings[2] + latestReadings[3];
+    }
+
 private:
     /* HOW MANY MOSFET BOARDS DO WE HAVE */
     int8_t mosfetModuleCount = 3;
@@ -259,6 +300,9 @@ private:
     /* Control loop targets */
     bool controlLoopRunning = false; // If false, set all outputs to zero. If true we enable control loop.
     bool controlLoopError = false;   // If true, we need to stop all activity until RESET is called.
+    int8_t errorType = 0; // What kind of error? 0 for current, 1 for power, 2 for temperature
+    int8_t errorMOSFET = 0; // What mosfet module experienced this error.
+
     int8_t targetMode = 0;              // 0 for current target. 1 for power target.
     int8_t targetValue = 0;             // Target value (could be Amps or Watts)
     
@@ -345,7 +389,7 @@ private:
             // Reading is the current per channel * system voltage
             for(int i = 0; i<4; i++)
             {
-                latestReadings[i] = readings_current[i] * readings_voltage[3];
+                latestReadings[i] = readings_current[i] * readings_voltage[load_voltage_channel];
             }
         }
 
@@ -402,11 +446,11 @@ private:
     int8_t check_power_limits()
     {
         double perChannelLimit = currentLimit / mosfetModuleCount;
-        perChannelLimit = perChannelLimit * readings_voltage[3]; // TODO: CHANGE TO PROPER VOLTAGE READING CHANNEL
+        perChannelLimit = perChannelLimit * readings_voltage[load_voltage_channel]; // TODO: CHANGE TO PROPER VOLTAGE READING CHANNEL
 
         for(int i = 0; i<4; i++)
         {
-            if(readings_current[i]* readings_voltage[3] > perChannelLimit)
+            if(readings_current[i]* readings_voltage[load_voltage_channel] > perChannelLimit)
             {
                 // Return index of the failing mosfet.
                 return i;
