@@ -276,7 +276,7 @@ class ControlLoop
         double latestReadings[4] = {0,0,0,0};
         for(int i = 0; i<4; i++)
         {
-            latestReadings[i] = readings_current[i]
+            latestReadings[i] = readings_current[i];
         }
         return latestReadings[0] + latestReadings[1] + latestReadings[2] + latestReadings[3];
     }
