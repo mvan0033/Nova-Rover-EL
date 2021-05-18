@@ -1,7 +1,10 @@
 #include <Arduino.h>
 #include <MCP342x.h>
 
-long ADC_MAX_RAW = 131071;
+MCP342x::Resolution globalADCresolution = MCP342x::resolution14;
+
+long ADC_MAX_RAW = 8192; // Depends on RESOLUTION ^^^ ABOVE! (eg 2^18/2) (divide by 2 because it's single-ended mode)
+
 double ADC_MAX_V = 5;
 
 /* 
@@ -16,7 +19,7 @@ long adc_read_raw(MCP342x *adcObject,MCP342x::Channel channel)
   MCP342x::Config adc_status; 
 
   // Initiate a conversion; convertAndRead() will wait until it can be read
-  uint8_t error = adcObject->convertAndRead(channel, MCP342x::oneShot,MCP342x::resolution18, MCP342x::gain1,1000000, value_raw, adc_status);
+  uint8_t error = adcObject->convertAndRead(channel, MCP342x::oneShot,globalADCresolution, MCP342x::gain1,100, value_raw, adc_status);
 
   if (error)
   {
