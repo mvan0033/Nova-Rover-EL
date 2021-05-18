@@ -1,18 +1,14 @@
 {
 	"folders": [
 		{
-			"path": "../../PCF8523"
+			"path": "../../EL_LCD_UI"
 		},
 		{
 			"name": "i2c_scanner",
 			"path": "../../i2c_scanner"
 		},
 		{
-			"name": "SD_card_Example",
-			"path": "../../SD_card_Example"
-		},
-		{
-			"name": "EL_LCD_UI",
+			"name": "PCF8523",
 			"path": ".."
 		}
 	],

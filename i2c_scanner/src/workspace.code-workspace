@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"name": "EL_LCD_UI",
+			"path": ".."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"__locale": "cpp",
+			"locale": "cpp"
+		}
+	}
+}
