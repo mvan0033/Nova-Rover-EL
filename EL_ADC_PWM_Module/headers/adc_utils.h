@@ -49,6 +49,7 @@ double util_voltage_to_temperature(double voltage)
 
     // temp divider
     double R_DIV_TOP = 1300;
+    
     double R_0 = 10000;
     double B = 3992;
     double T_0 = 298.15; // 25degC in Kelvin
@@ -106,4 +107,16 @@ double util_voltage_to_current(double voltage,double voltageRef)
     return I_TH;
 }
 
+double adc_read_temperature(MCP342x *adcObject,MCP342x::Channel channel)
+{
+  /* Convenience function to read a temperature directly */
+  double volt_result = adc_read_voltage(adcObject,channel,ADC_MAX_V);
+  return util_voltage_to_temperature(volt_result);
+}
 
+double adc_read_current(MCP342x *adcObject,MCP342x::Channel channel)
+{
+  /* Convenience function to read a temperature directly */
+  double volt_result = adc_read_voltage(adcObject,channel,ADC_MAX_V);
+  return util_voltage_to_current(volt_result,2.5);
+}
