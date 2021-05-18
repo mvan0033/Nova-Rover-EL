@@ -253,19 +253,22 @@ class ControlLoop
     }
 
 private:
+    /* HOW MANY MOSFET BOARDS DO WE HAVE */
+    int8_t mosfetModuleCount = 3;
+
     /* Control loop targets */
     bool controlLoopRunning = false; // If false, set all outputs to zero. If true we enable control loop.
     bool controlLoopError = false;   // If true, we need to stop all activity until RESET is called.
-    int targetMode = 0;              // 0 for current target. 1 for power target.
-    int targetValue = 0;             // Target value (could be Amps or Watts)
+    int8_t targetMode = 0;              // 0 for current target. 1 for power target.
+    int8_t targetValue = 0;             // Target value (could be Amps or Watts)
     
     /* Feedback variable */
     double targetErrors[4] = {0,0,0,0}; // Calculated error from our targetValue, identified PER-CHANNEL.
 
     /* GLOBAL SAFETY LIMITS */
-    int currentLimit = 10; // AMPS
-    int powerLimit = 100;  // WATTS
-    int temperatureLimit = 60;  // DEGREES C
+    int8_t currentLimit = 10; // AMPS
+    int8_t powerLimit = 100;  // WATTS
+    int8_t temperatureLimit = 60;  // DEGREES C
 
     /* Latest ADC readings per channel */
     double readings_temperature[4] = {0,0,0,0};
@@ -326,7 +329,7 @@ private:
     {
         // Depending on mode we calculate target error.
         double latestReadings[4] = {0,0,0,0};
-        double perChannelTarget = (double)targetValue / 4;
+        double perChannelTarget = (double)targetValue / mosfetModuleCount;
 
         if(targetMode == 0)
         {
@@ -382,7 +385,7 @@ private:
     /* Check current, power, temperature limits */
     int8_t check_current_limits()
     {
-        double perChannelLimit = currentLimit / 4;
+        double perChannelLimit = currentLimit / mosfetModuleCount;
         for(int i = 0; i<4; i++)
         {
             if(readings_current[i] > perChannelLimit)
@@ -398,7 +401,7 @@ private:
 
     int8_t check_power_limits()
     {
-        double perChannelLimit = currentLimit / 4;
+        double perChannelLimit = currentLimit / mosfetModuleCount;
         perChannelLimit = perChannelLimit * readings_voltage[3]; // TODO: CHANGE TO PROPER VOLTAGE READING CHANNEL
 
         for(int i = 0; i<4; i++)
