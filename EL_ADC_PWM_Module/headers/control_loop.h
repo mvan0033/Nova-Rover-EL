@@ -98,14 +98,35 @@ class ControlLoop
             // Read currents
             read_currents();
             // Check current limits, if non-zero return and signal error state.
+            int8_t result1 = check_current_limits();
+            if(result1 != -1)
+            {
+                controlLoopError = true;
+                explain_limit_failure(result1,0);
+                return;
+            }
 
             // Read voltages
             read_voltages();
             // Check power limits, if non-zero return and signal error state.
+            int8_t result2 = check_power_limits();
+            if(result2 != -1)
+            {
+                controlLoopError = true;
+                explain_limit_failure(result2,1);
+                return;
+            }
 
             // Read temperatures
             read_temperatures();
             // Check temperature limits, if non-zero return and signal error state.
+            int8_t result3 = check_temperature_limits();
+            if(result3 != -1)
+            {
+                controlLoopError = true;
+                explain_limit_failure(result3,2);
+                return;
+            }
 
             // Print the readings
             Serial.println(" ");
@@ -226,6 +247,11 @@ class ControlLoop
         print_reading_array(readings_temperature);
     }
 
+    bool get_error_state()
+    {
+        return controlLoopError;
+    }
+
 private:
     /* Control loop targets */
     bool controlLoopRunning = false; // If false, set all outputs to zero. If true we enable control loop.
@@ -330,6 +356,81 @@ private:
         Serial.print("Target Errors: ");
         print_reading_array(targetErrors);
     }
+
+    /* Print messages as a result of limit exceed */
+    void explain_limit_failure(int8_t result_code,int8_t failureMode)
+    {
+        // Result code determines which MOSFET failed
+        // Failure mode 0 means current, 1 means power, 2 means temperature
+        switch(failureMode)
+        {
+            case 0:
+                Serial.print("CURRENT LIMIT ON MOSFET #");
+                Serial.println(result_code);
+                break;
+            case 1:
+                Serial.print("POWER LIMIT ON MOSFET #");
+                Serial.println(result_code);
+                break;
+            case 2:
+                Serial.print("TEMPERATURE LIMIT ON MOSFET #");
+                Serial.println(result_code);
+                break;
+        }
+    }
+
+    /* Check current, power, temperature limits */
+    int8_t check_current_limits()
+    {
+        double perChannelLimit = currentLimit / 4;
+        for(int i = 0; i<4; i++)
+        {
+            if(readings_current[i] > perChannelLimit)
+            {
+                // Return index of the failing mosfet.
+                return i;
+            }            
+        }
+
+        // No error
+        return -1;
+    }
+
+    int8_t check_power_limits()
+    {
+        double perChannelLimit = currentLimit / 4;
+        perChannelLimit = perChannelLimit * readings_voltage[3]; // TODO: CHANGE TO PROPER VOLTAGE READING CHANNEL
+
+        for(int i = 0; i<4; i++)
+        {
+            if(readings_current[i]* readings_voltage[3] > perChannelLimit)
+            {
+                // Return index of the failing mosfet.
+                return i;
+            }            
+        }
+
+        // No error
+        return -1;
+    }
+
+    int8_t check_temperature_limits()
+    {
+        double perChannelLimit = temperatureLimit;
+
+        for(int i = 0; i<4; i++)
+        {
+            if(readings_temperature[i] > perChannelLimit)
+            {
+                // Return index of the failing mosfet.
+                return i;
+            }            
+        }
+
+        // No error
+        return -1;
+    }    
+
 
     /* Functions for reading ADCs */
     void read_temperatures() 

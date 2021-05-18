@@ -32,6 +32,14 @@ void loop(void)
   // Update control loop
   controller.update();
 
+  // Check error state
+  if(controller.get_error_state())
+  {
+    Serial.println("Resetting...");
+    delay(3000);
+    controller.reset_errors();
+  }
+
   // // Sweep the PWM
   // pwmOutputValue ++;
   // if(pwmOutputValue >= PWM_MAX)
