@@ -14,8 +14,8 @@
 #include <adc_utils.h>
 
 #define NUM_TLC59711 1
-#define data 8
-#define clock 7
+#define data 6
+#define clock 5
 #define PWM_MAX 65535
 
 // PWM MODULE OBJECT.
@@ -291,6 +291,11 @@ class ControlLoop
         }
 
         return latestReadings[0] + latestReadings[1] + latestReadings[2] + latestReadings[3];
+    }
+
+    double get_total_voltage()
+    {
+        return 28;
     }
 
 private:

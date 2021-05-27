@@ -1,116 +1,94 @@
-// Date and time functions using a PCF8523 RTC connected via I2C and Wire lib
-#include "RTClib.h"
-#include <Arduino.h>
+/*
+  SD card datalogger
+ 
+ This example shows how to log data from three analog sensors 
+ to an SD card using the SD library.
+ 	
+ The circuit:
+ * SD card attached to SPI bus as follows:
+ ** UNO:  MOSI - pin 11, MISO - pin 12, CLK - pin 13, CS - pin 4 (CS pin can be changed)
+  and pin #10 (SS) must be an output
+ ** Mega:  MOSI - pin 51, MISO - pin 50, CLK - pin 52, CS - pin 4 (CS pin can be changed)
+  and pin #52 (SS) must be an output
+ ** Leonardo: Connect to hardware SPI via the ICSP header
+ 		Pin 4 used here for consistency with other Arduino examples
+ 
+ created  24 Nov 2010
+ modified 9 Apr 2012 by Tom Igoe
+ 
+ This example code is in the public domain.
+ 	 
+ */
 
-RTC_PCF8523 rtc;
+#include <SPI.h>
+#include <SD.h>
 
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+// On the Ethernet Shield, CS is pin 4. Note that even if it's not
+// used as the CS pin, the hardware CS pin (10 on most Arduino boards,
+// 53 on the Mega) must be left as an output or the SD library
+// functions will not work.
+const int chipSelect = 4;
 
-void setup () {
+File dataFile;
+
+void setup()
+{
+ // Open serial communications and wait for port to open:
   Serial.begin(9600);
-
-#ifndef ESP8266
-  while (!Serial); // wait for serial port to connect. Needed for native USB
-#endif
-
-  if (! rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    Serial.flush();
-    abort();
+   while (!Serial) {
+    ; // wait for serial port to connect. Needed for Leonardo only
   }
 
-  if (! rtc.initialized() || rtc.lostPower()) {
-    Serial.println("RTC is NOT initialized, let's set the time!");
-    // When time needs to be set on a new device, or after a power loss, the
-    // following line sets the RTC to the date & time this sketch was compiled
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    // This line sets the RTC with an explicit date & time, for example to set
-    // January 21, 2014 at 3am you would call:
-    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
-    //
-    // Note: allow 2 seconds after inserting battery or applying external power
-    // without battery before calling adjust(). This gives the PCF8523's
-    // crystal oscillator time to stabilize. If you call adjust() very quickly
-    // after the RTC is powered, lostPower() may still return true.
+
+  Serial.print("Initializing SD card...");
+  // make sure that the default chip select pin is set to
+  // output, even if you don't use it:
+  pinMode(SS, OUTPUT);
+  
+  // see if the card is present and can be initialized:
+  if (!SD.begin(chipSelect)) {
+    Serial.println("Card failed, or not present");
+    // don't do anything more:
+    while (1) ;
   }
-
-  // When time needs to be re-set on a previously configured device, the
-  // following line sets the RTC to the date & time this sketch was compiled
-  // rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-  // This line sets the RTC with an explicit date & time, for example to set
-  // January 21, 2014 at 3am you would call:
-  // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
+  Serial.println("card initialized.");
   
-  // When the RTC was stopped and stays connected to the battery, it has
-  // to be restarted by clearing the STOP bit. Let's do this to ensure
-  // the RTC is running.
-  rtc.start();
-  
-   // The PCF8523 can be calibrated for:
-  //        - Aging adjustment
-  //        - Temperature compensation
-  //        - Accuracy tuning
-  // The offset mode to use, once every two hours or once every minute.
-  // The offset Offset value from -64 to +63. See the Application Note for calculation of offset values.
-  // https://www.nxp.com/docs/en/application-note/AN11247.pdf
-  // The deviation in parts per million can be calculated over a period of observation. Both the drift (which can be negative)
-  // and the observation period must be in seconds. For accuracy the variation should be observed over about 1 week.
-  // Note: any previous calibration should cancelled prior to any new observation period.
-  // Example - RTC gaining 43 seconds in 1 week
-  float drift = 43; // seconds plus or minus over oservation period - set to 0 to cancel previous calibration.
-  float period_sec = (7 * 86400);  // total obsevation period in seconds (86400 = seconds in 1 day:  7 days = (7 * 86400) seconds )
-  float deviation_ppm = (drift / period_sec * 1000000); //  deviation in parts per million (μs)
-  float drift_unit = 4.34; // use with offset mode PCF8523_TwoHours
-  // float drift_unit = 4.069; //For corrections every min the drift_unit is 4.069 ppm (use with offset mode PCF8523_OneMinute)
-  int offset = round(deviation_ppm / drift_unit);
-  // rtc.calibrate(PCF8523_TwoHours, offset); // Un-comment to perform calibration once drift (seconds) and observation period (seconds) are correct
-  // rtc.calibrate(PCF8523_TwoHours, 0); // Un-comment to cancel previous calibration
-
-  Serial.print("Offset is "); Serial.println(offset); // Print to control offset
-
+  // Open up the file we're going to log to!
+  dataFile = SD.open("datalog.txt", FILE_WRITE);
+  if (! dataFile) {
+    Serial.println("error opening datalog.txt");
+    // Wait forever since we cant write data
+    while (1) ;
+  }
 }
 
-void loop () {
-    DateTime now = rtc.now();
+void loop()
+{
+  // make a string for assembling the data to log:
+  String dataString = "";
 
-    Serial.print(now.year(), DEC);
-    Serial.print('/');
-    Serial.print(now.month(), DEC);
-    Serial.print('/');
-    Serial.print(now.day(), DEC);
-    Serial.print(" (");
-    Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
-    Serial.print(") ");
-    Serial.print(now.hour(), DEC);
-    Serial.print(':');
-    Serial.print(now.minute(), DEC);
-    Serial.print(':');
-    Serial.print(now.second(), DEC);
-    Serial.println();
+  // read three sensors and append to the string:
+  for (int analogPin = 0; analogPin < 3; analogPin++) {
+    int sensor = analogRead(analogPin);
+    dataString += String(sensor);
+    if (analogPin < 2) {
+      dataString += ","; 
+    }
+  }
 
-    Serial.print(" since midnight 1/1/1970 = ");
-    Serial.print(now.unixtime());
-    Serial.print("s = ");
-    Serial.print(now.unixtime() / 86400L);
-    Serial.println("d");
+  dataFile.println(dataString);
 
-    // calculate a date which is 7 days, 12 hours and 30 seconds into the future
-    DateTime future (now + TimeSpan(7,12,30,6));
-
-    Serial.print(" now + 7d + 12h + 30m + 6s: ");
-    Serial.print(future.year(), DEC);
-    Serial.print('/');
-    Serial.print(future.month(), DEC);
-    Serial.print('/');
-    Serial.print(future.day(), DEC);
-    Serial.print(' ');
-    Serial.print(future.hour(), DEC);
-    Serial.print(':');
-    Serial.print(future.minute(), DEC);
-    Serial.print(':');
-    Serial.print(future.second(), DEC);
-    Serial.println();
-
-    Serial.println();
-    delay(3000);
+  // print to the serial port too:
+  Serial.println(dataString);
+  
+  // The following line will 'save' the file to the SD card after every
+  // line of data - this will use more power and slow down how much data
+  // you can read but it's safer! 
+  // If you want to speed up the system, remove the call to flush() and it
+  // will save the file only every 512 bytes - every time a sector on the 
+  // SD card is filled with data.
+  dataFile.flush();
+  
+  // Take 1 measurement every 500 milliseconds
+  delay(500);
 }

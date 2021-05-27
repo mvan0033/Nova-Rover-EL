@@ -11,16 +11,23 @@ Date: 11/05/2021
 #include <math.h>
 #include <Arduino.h>
 #include <SPI.h>
+#include <SD.h>
+#include <RTClib.h>
 #include <control_loop.h>
+
 
 // Control loop object which handles our PWM/ADC hardware.
 ControlLoop controller;
+
+// RTC object which handles RTC hardware
+RTC_PCF8523 rtc;
 
 // Global variables
 // Defining Pins
 #define rotary_encoder_clk 2
 #define rotary_encoder_dt 3
 #define rotary_encoder_sw 4
+#define buzzer_pin 7
 
 volatile bool clockwise;
 volatile bool turnDetected = false;
@@ -28,7 +35,7 @@ volatile bool buttonPressed = false;
 
 // Variables for displaying power value
 int powerDigit1 = 1; // Tens digit 
-int powerDigit2 = 0; // Units digit
+int powerDigit2; // Units digit
 // int powerDigit3 = 0; // Tenths digit
 // int powerDigit4 = 0; // Hundredth digit
 // int powerDecimalPlace = 0;
@@ -36,37 +43,58 @@ int power;
 
 // Variables for displaying current values
 int currentDigit1 = 1; // Tens digit
-int currentDigit2 = 0; // Units digit
+int currentDigit2; // Units digit
 // int currentDigit3 = 0; // Tenths digit
 // int currentDigit4 = 0; // Hundredth digit
 // int currentDecimalPlace = 0;
 int current;
 
 // Variables for displaying low voltage values
-int lowVoltageDigit1 = 0; // Tens digit
-int lowVoltageDigit2 = 0; // Units digit
-int lowVoltageDigit3 = 0; // Tenths digit
-int lowVoltageDecimalPlace = 0;
+int timeLimitDigit1; // Hundreds digit
+int timeLimitDigit2; // Tens digit
+int timeLimitDigit3; // Units digit
+float timeLimit;
+
+// Variables for displaying low voltage values
+int lowVoltageDigit1; // Tens digit
+int lowVoltageDigit2; // Units digit
+int lowVoltageDigit3; // Tenths digit
 float lowVoltage;
 
 // Misc Variables
-float curCurrent = 0;
-float curPower = 0;
-float hotTemp = 0;
-int elapsedTime = 0;
+float curCurrent;
+float curPower;
+float hotTemp;
+int elapsedTime;
 int lcdAddress = 0x27;
 int screen = 1;
-int cursorPosition = 0;
-int selectedDigit = 0;
+int cursorPosition;
+int selectedDigit;
 bool dataLogging = false; 
 bool powerMode;
-// bool nextDigit = false;
+unsigned long referenceTime = millis();
+unsigned long timeOffset;
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 // Creating LCD object
 LiquidCrystal_I2C lcd(lcdAddress, 128, 64);
 
+// Buzzer function
+void buzzer()
+{
+  pinMode(buzzer_pin, OUTPUT);
+
+  while (!buttonPressed)
+  {
+    digitalWrite(buzzer_pin, HIGH);
+    delay(2);
+    digitalWrite(buzzer_pin, LOW);
+    delay(2);
+  }
+}
+
 // Start up screen
-void screen0() 
+void screen0(uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, int16_t year) 
 {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -75,6 +103,17 @@ void screen0()
   lcd.print("ROVER");
   lcd.setCursor(2, 0);
   lcd.print("ELECTRONIC LOAD");
+  lcd.setCursor(3, 0);
+  lcd.print(hour);
+  lcd.print(":");
+  lcd.print(minute);
+  lcd.print(" (");
+  lcd.print(day);
+  lcd.print("/");
+  lcd.print(month);
+  lcd.print("/");
+  lcd.print(year);
+  lcd.print(")");
 }
 
 // Current/power mode selection
@@ -199,8 +238,60 @@ void screen6()
   cursorPosition = 0;
 }
 
+// Prompt user for time limit
+void screen7()
+{
+    // Calculate low voltage value
+    timeLimit = timeLimitDigit1*pow(10, 2) + timeLimitDigit2*pow(10, 1) + timeLimitDigit3;
+
+    // Set up screen
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("Time:");
+    lcd.print(timeLimit, 0);
+    lcd.print("mins");
+    lcd.setCursor(1, 1);
+    lcd.print("Next");
+    lcd.setCursor(2, 1);
+    lcd.print("Back");
+    lcd.setCursor(0, 0);
+    lcd.write(byte(62)); // Print an arrow character
+    cursorPosition = 0;
+}
+
+// Adjusting time limit
+void screen8()
+{
+    // Calculate time limit value
+    timeLimit = timeLimitDigit1*pow(10, 2) + timeLimitDigit2*pow(10, 1) + timeLimitDigit3;
+
+    // Set up screen
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("Time Limit: ");
+    lcd.setCursor(1, 1);
+
+    // Padding the number
+    if (timeLimit < 100)
+    {
+        lcd.print("00");
+        lcd.print(timeLimit, 0);
+    }
+    else if (timeLimit < 10)
+    {
+        lcd.print("0");
+        lcd.print(timeLimit, 0);
+    }
+    else
+    {
+        lcd.print(timeLimit, 0);
+    }
+
+    lcd.print("mins");
+}
+
 // Prompt user for low-voltage cut-off
-void screen7() 
+void screen9() 
 {
   // Calculate low voltage value
   lowVoltage = lowVoltageDigit1*pow(10, 1) + lowVoltageDigit2 + lowVoltageDigit3*pow(10, -1);
@@ -223,7 +314,7 @@ void screen7()
 }
 
 // Adjusting low-voltage cut-off
-void screen8() 
+void screen10() 
 {
   // Calculate low voltage value
   lowVoltage = lowVoltageDigit1*pow(10, 1) + lowVoltageDigit2 + lowVoltageDigit3*pow(10, -1);
@@ -251,7 +342,7 @@ void screen8()
 }
 
 // Display system monitor for current
-void screen9()
+void screen11()
 {
   // Set the current mode and output
   controller.set_target_mode(0);
@@ -282,9 +373,9 @@ void screen9()
 }
 
 // Display system monitor for power
-void screen10()
+void screen12()
 {
-  controller.set_target_mode(0);
+  controller.set_target_mode(1);
   controller.set_target_value(power);
 
   lcd.clear();
@@ -312,7 +403,7 @@ void screen10()
 }
 
 // No/invaild SD card
-void screen11()
+void screen13()
 {
   lcd.clear();
   lcd.setCursor(1, 0);
@@ -325,27 +416,33 @@ void screen11()
 }
 
 // Overtemperature error
-void screen12()
+void screen14()
 {
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("OVERTEMPERATURE");
   lcd.setCursor(5, 2);
   lcd.print("ERROR");
+
+  // Play sound to indicate overtemperature error
+  buzzer();
 }
 
 // Low-voltage error
-void screen13()
+void screen15()
 {
   lcd.clear();
   lcd.setCursor(3, 1);
   lcd.print("LOW VOLTAGE");
   lcd.setCursor(2, 0);
   lcd.print("CUT-OFF TERMINATION");
+
+  // Play sound to indicate low-voltage error
+  buzzer();
 }
 
 // Analysis complete
-void screen14()
+void screen16()
 {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -354,16 +451,22 @@ void screen14()
   lcd.print("COMPLETE");
   lcd.setCursor(2, 0);
   lcd.print("REMOVE SD CARD");
+
+  // Play sound to indicate analysis complete
+  buzzer();
 }
 
 // Early termination
-void screen15()
+void screen17()
 {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("ANALYSIS");
   lcd.setCursor(1, 0);
   lcd.print("TERMINATED");
+
+  // Play sound to indicate early termination
+  buzzer();
 }
 
 // Function to display set the current/power and display on the LCD
@@ -527,6 +630,30 @@ ISR(PCINT2_vect)
   
 void setup()
 {
+  Serial.begin(9600);
+
+  if (!rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    Serial.flush();
+    abort();
+  }
+
+  if (! rtc.initialized() || rtc.lostPower()) {
+    Serial.println("RTC is NOT initialized, let's set the time!");
+    // Set RTC to the date & time this sketch was compiled
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    // Note: allow 2 seconds after inserting battery or applying external power
+    // without battery before calling adjust(). This gives the PCF8523's
+    // crystal oscillator time to stabilize. If you call adjust() very quickly
+    // after the RTC is powered, lostPower() may still return true.
+  }
+  
+  rtc.start();
+
+  // Create DateTime object for printing/displaying date & time
+  DateTime now = rtc.now();
+
+
   // Setup control loop object (which initialises ADC/PWM hardware)
   controller.init();
 
@@ -550,12 +677,13 @@ void setup()
  attachInterrupt(digitalPinToInterrupt(rotary_encoder_dt), isr0, RISING);
 
  // Beginning the LCD start sequence
- screen0();
- delay(2500);
+ screen0(now.minute(), now.hour(), now.day(), now.month(), now.year());
+ delay(4000);
  screen1();
  lcd.setCursor(0, 0);
  lcd.write(byte(62)); // 62 is arrow character, 32 is empty character
 
+ // Initialise EL as off
  controller.set_enable(false);
 }
 
@@ -563,7 +691,6 @@ void loop()
 {
   // Update control loop!
   controller.update();
-
 
   // Check error state (true means error)
   if(controller.get_error_state())
@@ -578,9 +705,29 @@ void loop()
     // controller.reset_errors();
   }
   
-  // Update global variables
-  curCurrent = controller.get_total_current();
-  curPower = controller.get_total_power();
+  // Update global variables every 1 seconds
+  if (millis() - referenceTime > 1000)
+  {
+    // curCurrent = controller.get_total_current();
+    // curPower = controller.get_total_power();
+    curCurrent = rand();
+    curPower = rand();
+    elapsedTime = int(millis()/1000) - int(timeOffset/1000);
+    hotTemp = rand();
+    
+    if (screen == 11)
+    {
+      screen11();
+    }
+    else if (screen == 12)
+    {
+      screen12();
+    }
+
+    referenceTime = millis();
+  }
+
+
 
   delay(60);
 
@@ -666,33 +813,33 @@ void loop()
        break;
      }
 
-     case 7: // Low voltage cut-off screen
+     case 7: // Time limit screen
      {
         // Change selected option
-        optionSelection(3, 1, true); 
+        optionSelection(3, 0, false); 
         break; 
      }
 
-     case 8: // Low voltage cut-off adjustment screen 
+     case 8: // Time limit adjustment screen
      {
-        // Change digit
+       // Change digit
         switch (selectedDigit)
         {
           case 1:
           {
-            changeDigit(&lowVoltageDigit1);
+            changeDigit(&timeLimitDigit1);
             screen8();
             break;
           }
           case 2:
           {
-            changeDigit(&lowVoltageDigit2);
+            changeDigit(&timeLimitDigit2);
             screen8();
             break;
           }
           case 3:
           {
-            changeDigit(&lowVoltageDigit3);
+            changeDigit(&timeLimitDigit3);
             screen8();
             break;
           }
@@ -704,43 +851,81 @@ void loop()
         break;
      }
 
-     case 9: // Current monitor screen
+     case 9: // Low voltage cut-off screen
+     {
+        // Change selected option
+        optionSelection(3, 1, true); 
+        break; 
+     }
+
+     case 10: // Low voltage cut-off adjustment screen 
+     {
+        // Change digit
+        switch (selectedDigit)
+        {
+          case 1:
+          {
+            changeDigit(&lowVoltageDigit1);
+            screen10();
+            break;
+          }
+          case 2:
+          {
+            changeDigit(&lowVoltageDigit2);
+            screen10();
+            break;
+          }
+          case 3:
+          {
+            changeDigit(&lowVoltageDigit3);
+            screen10();
+            break;
+          }
+          default:
+          {
+            Serial.print("3. This is an error\n");
+          }
+        }
+        break;
+     }
+
+     case 11: // Current monitor screen
      {
        // Do nothing
        break;
      }
 
-     case 10: // Power monitor screen
+     case 12: // Power monitor screen
      {
        // Do nothing
        break;
      }
 
-     case 11: // No/invaid SD card screen
+     case 13: // No/invaid SD card screen
      {
        // Do nothing
        break;
      }
 
-     case 12: // Overtemperature screen
+     case 14: // Overtemperature screen
      {
        // Do nothing
        break;
      }
 
-     case 13: // Low-voltage cut-off termination screen
+     case 15: // Low-voltage cut-off termination screen
      {
        // Do nothing
        break;
      }
      
-     case 14: // Analysis complete screen
+     case 16: // Analysis complete screen
      {
        // Do nothing
        break;
      }
 
-     case 15: // Analysis terminated screen
+     case 17: // Analysis terminated screen
      {
        // Do nothing
        break;
@@ -937,7 +1122,7 @@ void loop()
         break;
       }
 
-      case 7: // Low voltage cut-off screen
+      case 7: // Time limit screen
       {
         switch (cursorPosition)
         {
@@ -948,18 +1133,10 @@ void loop()
             break;
           }
           
-          case 1: // Start
+          case 1: // Next
           {
-            if (powerMode)
-            {
-              screen10();
-              screen = 10;
-            }
-            else
-            {
-              screen9();
-              screen = 9;
-            }
+            screen9();
+            screen = 9;
             break;
            }
 
@@ -972,8 +1149,87 @@ void loop()
         }
         break;
       }
+
+      case 8: // Time limit adjustment screen
+      {
+        // Flash digit & move along
+        selectedDigit++;
+
+        switch (selectedDigit)
+        {
+          case 1: // Tens digit
+          {
+            char buffer[2];
+            itoa(timeLimitDigit2, buffer, 10);
+            flashDigit(timeLimitDigit1, 1, 1, buffer, false);
+            break;
+          }
+          case 2: // Units digit
+          {
+            char buffer[2];
+            itoa(timeLimitDigit1, buffer, 10);
+            flashDigit(timeLimitDigit2, 1, 1, buffer, true);
+            break;
+          }
+          case 3: // Tenths digit
+          {
+            flashDigit(timeLimitDigit3, 1, 2, "", true);
+            break;
+          }
+          default: // Continue to next screen and reset selectedDigit
+          {
+            screen7();
+            screen = 7;
+            selectedDigit = 0;
+          }
+        }
+        break;
+      }
+
+      case 9: // Low voltage cut-off screen
+      {
+        switch (cursorPosition)
+        {
+          case 0: // Set Low voltage cut-off
+          {
+            screen10();
+            screen = 10;
+            break;
+          }
+          
+          case 1: // Start
+          {
+
+            // Set the time offset for the elaspsed time
+            timeOffset = millis();
+            elapsedTime = int(millis()/1000) - int(timeOffset/1000);
+
+            if (powerMode)
+            {
+              screen12();
+              screen = 12;
+              
+            }
+            else
+            {
+              screen11();
+              screen = 11;
+            }
+
+            break;
+           }
+
+          case 2: // Back
+          {
+            screen7();
+            screen = 7;
+            break;
+          }
+        }
+        break;
+      }
     
-      case 8: // Low voltage cut-off adjustment screen 
+      case 10: // Low voltage cut-off adjustment screen 
       {
         // Flash digit & move along
         selectedDigit++;
@@ -1001,61 +1257,63 @@ void loop()
           }
           default: // Continue to next screen and reset selectedDigit
           {
-            screen7();
-            screen = 7;
+            screen9();
+            screen = 9;
             selectedDigit = 0;
           }
         }
         break;
       }
     
-      case 9: // Current monitor screen
+      case 11: // Current monitor screen
       {
-        screen15();
-        screen = 15;
+        screen17();
+        screen = 17;
 
         // TODO: End termination
+        controller.set_enable(false);
         break;
       }
 
-      case 10: // Power monitor screen
+      case 12: // Power monitor screen
       {
-        screen15();
-        screen = 15;
+        screen17();
+        screen = 17;
         
         // TODO: End termination
+        controller.set_enable(false);
         break;
       }
 
-      case 11: // No/invaid SD card screen
+      case 13: // No/invaid SD card screen
       {
         screen6();
         screen = 6;
         break;
       }
 
-      case 12: // Overtemperature screen
+      case 14: // Overtemperature screen
       {
         screen1();
         screen = 1;
         break;
       }
 
-      case 13: // Low-voltage cut-off termination screen
+      case 15: // Low-voltage cut-off termination screen
       {
         screen1();
         screen = 1;
         break;
       }
 
-      case 14: // Analysis complete screen
+      case 16: // Analysis complete screen
       {
         screen1();
         screen = 1;
         break;
       }
 
-      case 15: // Analysis terminated screen
+      case 17: // Analysis terminated screen
       {
         screen1();
         screen = 1;
@@ -1063,6 +1321,7 @@ void loop()
       }
     }
   }
+
 }
 
 
