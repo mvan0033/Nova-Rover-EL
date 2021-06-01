@@ -3,6 +3,12 @@
 // Handles STATE of the controller feedback loop.
 // Handles ERRORS in over-current or over-temperature etc.
 
+// NO_HARDWARE_MODE is used to develop control loop dependant software,
+// WITHOUT any of the PWM/ADC hardware modules.
+// Set to 1 for no hardware
+// Set to 0 for normal operation (expects I2C, SPI devices to be attached)
+#define NO_HARDWARE_MODE 1
+
 #include <Wire.h>
 #include <SPI.h>
 
@@ -18,6 +24,7 @@
 #define clock 5
 #define PWM_MAX 65535
 
+#if NO_HARDWARE_MODE == 0
 // PWM MODULE OBJECT.
 // Please only define this once.
 Adafruit_TLC59711 pwm_module = Adafruit_TLC59711(NUM_TLC59711, clock, data);
@@ -34,6 +41,7 @@ uint8_t adc_voltage_addr = 0x6C; // MARKED AS 0X6A ON THE PCB
 MCP342x adc_temperature = MCP342x(adc_temperature_addr);
 MCP342x adc_current = MCP342x(adc_current_addr);
 MCP342x adc_voltage = MCP342x(adc_voltage_addr);
+#endif
 
 int8_t load_voltage_channel = 3; // What channel of the adc_voltage chip, do we find out 0 to 75V LOAD voltage.
 
@@ -43,44 +51,49 @@ class ControlLoop
 
     void init()
     {
-        // Setup PWM module
-        Serial.print("Setting up PWM module...");
-        pwm_module.begin();
-        pwm_module.write();
-        pwm_module.simpleSetBrightness(127);
-        pwm_module.write();
-        pwm_set_duty_all(&pwm_module, 0);
-        Serial.println("Done.");
+        #if NO_HARDWARE_MODE == 1
+            Serial.println("NO HARDWARE MODE ENABLED.");
+            Serial.println("(See control_loop.h to change this)");
+        #else
+            // Setup PWM module
+            Serial.print("Setting up PWM module...");
+            pwm_module.begin();
+            pwm_module.write();
+            pwm_module.simpleSetBrightness(127);
+            pwm_module.write();
+            pwm_set_duty_all(&pwm_module, 0);
+            Serial.println("Done.");
 
-        // Reset devices
-        Serial.print("Calling reset of all MCP3424 chips...");
-        MCP342x::generalCallReset();
-        delay(1); // MC342x needs 300us to settle, wait 1ms
-        Serial.println("Done.");
+            // Reset devices
+            Serial.print("Calling reset of all MCP3424 chips...");
+            MCP342x::generalCallReset();
+            delay(1); // MC342x needs 300us to settle, wait 1ms
+            Serial.println("Done.");
 
-        Serial.println("Checking for ADC chips...");
+            Serial.println("Checking for ADC chips...");
 
-        // Check for ADC modules SPECIFICALLY
-        if(!util_check_i2c_device_exists(adc_temperature_addr))
-        {
-            Serial.print("Temperature Reading ADC, ");
-            Serial.print(adc_temperature_addr,HEX);
-            Serial.println(", NOT FOUND.");
-        }
+            // Check for ADC modules SPECIFICALLY
+            if(!util_check_i2c_device_exists(adc_temperature_addr))
+            {
+                Serial.print("Temperature Reading ADC, ");
+                Serial.print(adc_temperature_addr,HEX);
+                Serial.println(", NOT FOUND.");
+            }
 
-        if(!util_check_i2c_device_exists(adc_voltage_addr))
-        {
-            Serial.print("Voltage Reading ADC, ");
-            Serial.print(adc_voltage_addr,HEX);
-            Serial.println(", NOT FOUND.");
-        }
+            if(!util_check_i2c_device_exists(adc_voltage_addr))
+            {
+                Serial.print("Voltage Reading ADC, ");
+                Serial.print(adc_voltage_addr,HEX);
+                Serial.println(", NOT FOUND.");
+            }
 
-        if(!util_check_i2c_device_exists(adc_current_addr))
-        {
-            Serial.print("Current Reading ADC, ");
-            Serial.print(adc_current_addr,HEX);
-            Serial.println(", NOT FOUND.");
-        }
+            if(!util_check_i2c_device_exists(adc_current_addr))
+            {
+                Serial.print("Current Reading ADC, ");
+                Serial.print(adc_current_addr,HEX);
+                Serial.println(", NOT FOUND.");
+            }
+        #endif
     }
 
     void update()
@@ -90,7 +103,12 @@ class ControlLoop
         if(controlLoopError)
         {
             // SET PWM TO ZERO
-            pwm_set_duty_all(&pwm_module,0);
+            Serial.println("Control loop error. Setting PWMs to 0.");
+
+            #if NO_HARDWARE_MODE == 0
+                pwm_set_duty_all(&pwm_module,0);
+            #endif
+
             // RETURN
             return;
         }
@@ -149,7 +167,11 @@ class ControlLoop
 
         }else{
             // SET PWM TO ZERO
-            pwm_set_duty_all(&pwm_module,0);
+            #if NO_HARDWARE_MODE == 0
+                pwm_set_duty_all(&pwm_module,0);
+            #else
+                Serial.println("Setting PWM to 0.");
+            #endif
         }
     }
 
@@ -197,7 +219,7 @@ class ControlLoop
         case 0:
             if (tempValue > currentLimit)
             {
-                Serial.println("Target value above current limit!");
+                Serial.println("Target value above current limit! Clamping...");
                 tempValue = currentLimit;
             }
             if (tempValue < 0)
@@ -211,7 +233,7 @@ class ControlLoop
         case 1:
             if (tempValue > powerLimit)
             {
-                Serial.println("Target value above power limit!");
+                Serial.println("Target value above power limit! Clamping...");
                 tempValue = powerLimit;
             }
             if (tempValue < 0)
@@ -333,10 +355,23 @@ private:
     /* Apply per-channel PWM */
     void apply_pwm_output_values()
     {
-        pwm_set_duty(&pwm_module,0,outputs_pwm[0]);
-        pwm_set_duty(&pwm_module,1,outputs_pwm[1]);
-        pwm_set_duty(&pwm_module,2,outputs_pwm[2]);
-        pwm_set_duty(&pwm_module,3,outputs_pwm[3]);
+        #if NO_HARDWARE_MODE == 0
+            pwm_set_duty(&pwm_module,0,outputs_pwm[0]);
+            pwm_set_duty(&pwm_module,1,outputs_pwm[1]);
+            pwm_set_duty(&pwm_module,2,outputs_pwm[2]);
+            pwm_set_duty(&pwm_module,3,outputs_pwm[3]);
+        #else
+            Serial.println("APPLYING PWM OUTPUTS");
+            Serial.print("CH0: ");
+            Serial.println(outputs_pwm[0]);
+            Serial.print("CH1: ");
+            Serial.println(outputs_pwm[1]);
+            Serial.print("CH2: ");
+            Serial.println(outputs_pwm[2]);
+            Serial.print("CH3: ");
+            Serial.println(outputs_pwm[3]);
+            
+        #endif
     }
 
     /* From per-channel errors, update the PWM outputs */
@@ -491,10 +526,23 @@ private:
         /* Read all the temperature ADC channels and store into 
         readings_temperature array. (Degrees Celcius)
         */
-        readings_temperature[0] = adc_read_temperature(&adc_temperature,MCP342x::channel1);
-        readings_temperature[1] = adc_read_temperature(&adc_temperature,MCP342x::channel2);
-        readings_temperature[2] = adc_read_temperature(&adc_temperature,MCP342x::channel3);
-        readings_temperature[3] = adc_read_temperature(&adc_temperature,MCP342x::channel4);
+        #if NO_HARDWARE_MODE == 0
+            readings_temperature[0] = adc_read_temperature(&adc_temperature,MCP342x::channel1);
+            readings_temperature[1] = adc_read_temperature(&adc_temperature,MCP342x::channel2);
+            readings_temperature[2] = adc_read_temperature(&adc_temperature,MCP342x::channel3);
+            readings_temperature[3] = adc_read_temperature(&adc_temperature,MCP342x::channel4);
+        #else
+            // In no hardware mode, we set all temperatures to 30 deg, plus some random noise.
+            // We also simulate the time it takes to perform a reading by delaying here.
+            readings_temperature[0] = 30 + (float)random(-20,20)/10;
+            readings_temperature[1] = 30 + (float)random(-20,20)/10;
+            readings_temperature[2] = 30 + (float)random(-20,20)/10;
+            readings_temperature[3] = 30 + (float)random(-20,20)/10;
+            
+            // At 14-bit precision, we can expect ~66 ms delay for a 4-IC reading.
+            // See MCP3424 for samples-per-second figures, to determine this.
+            delay(66);
+        #endif
 
         // Override if nan
         for(int i = 0; i<4; i++){
@@ -504,17 +552,60 @@ private:
             }
         }
     }
+    
+    double fake_mosfet_model(double vgs)
+    {
+        /* Returns a fake current throughput, assuming V_DS == 10V,
+            given a base voltage.
+
+            This was done from our real-world data, and equations derived from trendlines.
+        */
+        // The equation is piece-wise, with two different exponential regions.
+        // They intersection about the ~4V mark.
+        // Equation 1 (<4V GS, very low current)
+        double eq1_current = (double)(2.5923060142355E-15) * exp(8.1407449923113 * vgs);
+        double eq2_current = 734.04065811719 * pow(vgs,2) - 5824.45578150388 * vgs + 11554.22728209;
+
+        // Intersection calculated with wolfram alpha.
+        if(vgs < 3.96739)
+        {
+            return eq1_current;
+        }else{
+            return eq2_current;
+        }
+    }
 
     void read_currents()
     {
         /* Read all the Current ADC channels and store into 
         readings_current array. (AMPS)
         */
-        readings_current[0] = adc_read_current(&adc_current,MCP342x::channel1);
-        readings_current[1] = adc_read_current(&adc_current,MCP342x::channel2);
-        readings_current[2] = adc_read_current(&adc_current,MCP342x::channel3);
-        readings_current[3] = adc_read_current(&adc_current,MCP342x::channel4);
+        #if NO_HARDWARE_MODE == 0
+            readings_current[0] = adc_read_current(&adc_current,MCP342x::channel1);
+            readings_current[1] = adc_read_current(&adc_current,MCP342x::channel2);
+            readings_current[2] = adc_read_current(&adc_current,MCP342x::channel3);
+            readings_current[3] = adc_read_current(&adc_current,MCP342x::channel4);
+        #else
+            // In no hardware mode, we use the PWM settings 
+            // and 'pretend' it's letting more current through.
+            // This gives us a 'fake' current response :)
+            
+            // We will also make this non-linear, according to our tests at 10V_DS.
+            // (see DATA/MOSFET_MODULE_10VDS_Variable_VGS)
+            // I plotted some points of V_GS vs I_DS, and fit a curve to that.
+            // Then used the curve equation here to make it 'semi-realistic'
+            // Also added noise! (+/- 0.2A)    
         
+            readings_current[0] = fake_mosfet_model(5*(outputs_pwm[0]/65535)) + (float)random(-20,20)/10;
+            readings_current[1] = fake_mosfet_model(5*(outputs_pwm[1]/65535)) + (float)random(-20,20)/10;
+            readings_current[2] = fake_mosfet_model(5*(outputs_pwm[2]/65535)) + (float)random(-20,20)/10;
+            readings_current[3] = fake_mosfet_model(5*(outputs_pwm[3]/65535)) + (float)random(-20,20)/10;
+            
+            // At 14-bit precision, we can expect ~66 ms delay for a 4-IC reading.
+            // See MCP3424 for samples-per-second figures, to determine this.
+            delay(66);
+        #endif
+
         // Override if nan, or <0
         for(int i = 0; i<4; i++){
             if(isnan(readings_current[i]) || readings_current[i] < 0)
@@ -529,10 +620,21 @@ private:
         /* Read all the Voltage ADC channels and store into 
         readings_voltages array. (Volts)
         */
-        readings_voltage[0] = adc_read_voltage(&adc_voltage,MCP342x::channel1,5);
-        readings_voltage[1] = adc_read_voltage(&adc_voltage,MCP342x::channel2,5);
-        readings_voltage[2] = adc_read_voltage(&adc_voltage,MCP342x::channel3,75);
-        readings_voltage[3] = adc_read_voltage(&adc_voltage,MCP342x::channel4,5);
+        #if NO_HARDWARE_MODE == 0
+            readings_voltage[0] = adc_read_voltage(&adc_voltage,MCP342x::channel1,5);
+            readings_voltage[1] = adc_read_voltage(&adc_voltage,MCP342x::channel2,5);
+            readings_voltage[2] = adc_read_voltage(&adc_voltage,MCP342x::channel3,75);
+            readings_voltage[3] = adc_read_voltage(&adc_voltage,MCP342x::channel4,5);
+        #else
+            // Non-connected noise
+            readings_voltage[0] = (float)random(-200,200)/10;
+            readings_voltage[1] = (float)random(-200,200)/10;
+            readings_voltage[2] = (float)random(-200,200)/10;
+            readings_voltage[3] = (float)random(-200,200)/10;
+
+            // System load. 10th volt noise
+            readings_voltage[load_voltage_channel] = 10 + (float)random(-10,10)/10;
+        #endif
 
         // Override if nan, or <0
         for(int i = 0; i<4; i++){
