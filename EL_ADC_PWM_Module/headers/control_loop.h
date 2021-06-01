@@ -295,7 +295,8 @@ class ControlLoop
 
     double get_total_voltage()
     {
-        return 28;
+        // Return system load voltage
+        return readings_voltage[load_voltage_channel];
     }
 
 private:
