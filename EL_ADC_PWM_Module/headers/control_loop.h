@@ -105,6 +105,9 @@ class ControlLoop
             // SET PWM TO ZERO
             Serial.println("Control loop error. Setting PWMs to 0.");
 
+            // Reset outputs
+            reset_pwm_arrays_to_zero();
+
             #if NO_HARDWARE_MODE == 0
                 pwm_set_duty_all(&pwm_module,0);
             #endif
@@ -166,9 +169,13 @@ class ControlLoop
             apply_pwm_output_values();
 
         }else{
+            // Reset output PWMs
+            reset_pwm_arrays_to_zero();
+
             // SET PWM TO ZERO
             #if NO_HARDWARE_MODE == 0
-                pwm_set_duty_all(&pwm_module,0);
+                // Sends zero to the PWM module
+                pwm_set_duty_all(pwm_module,0);
             #else
                 Serial.println("Setting PWM to 0.");
             #endif
@@ -319,6 +326,19 @@ class ControlLoop
     {
         // Return system load voltage
         return readings_voltage[load_voltage_channel];
+    }
+
+    bool get_pwm_active_state()
+    {
+        // Returns a boolean that signifies if PWM outputs are enabled or not.
+        // This is another indication that the system is running.
+        // Here, we just check if all outputs are zero.
+        if(outputs_pwm[0] == 0 && outputs_pwm[1] == 0 && outputs_pwm[2] == 0 && outputs_pwm[3] == 0)
+        {
+            return true;
+        }
+
+        return false;
     }
 
 private:
@@ -643,5 +663,14 @@ private:
                 readings_voltage[i] = 0;
             }
         }
+    }
+
+    void reset_pwm_arrays_to_zero()
+    {
+        // Resets outputs_pwm arrays to zero
+        outputs_pwm[0] = 0;
+        outputs_pwm[1] = 0;
+        outputs_pwm[2] = 0;
+        outputs_pwm[3] = 0;
     }
 };
