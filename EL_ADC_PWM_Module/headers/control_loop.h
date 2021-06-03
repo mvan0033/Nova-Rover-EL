@@ -15,9 +15,9 @@
 #include <MCP342x.h>
 #include "Adafruit_TLC59711.h"
 
-#include <utils.h>
-#include <pwm_utils.h>
-#include <adc_utils.h>
+#include "utils.h"
+#include "pwm_utils.h"
+#include "adc_utils.h"
 
 #define NUM_TLC59711 1
 #define data 6
