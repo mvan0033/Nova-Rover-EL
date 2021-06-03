@@ -373,9 +373,9 @@ private:
     double targetErrors[4] = {0,0,0,0}; // Calculated error from our targetValue, identified PER-CHANNEL.
 
     /* GLOBAL SAFETY LIMITS */
-    int8_t currentLimit = 10; // AMPS
-    int8_t powerLimit = 100;  // WATTS
-    int8_t temperatureLimit = 60;  // DEGREES C
+    int8_t currentLimit = 100; // AMPS
+    int8_t powerLimit = 1000;  // WATTS
+    int8_t temperatureLimit = 600;  // DEGREES C
 
     /* Latest ADC readings per channel */
     double readings_temperature[4] = {0,0,0,0};
