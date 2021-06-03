@@ -426,8 +426,15 @@ private:
                 pwmError = -pwm_rate_limit;
             }
 
-            // Apply this pwmError to the outputs_pwm array
-            outputs_pwm[i] += (uint16_t)floor(pwmError);
+            // Check overflow condition
+            if(outputs_pwm[i] + (uint16_t)floor(pwmError) >= PWM_MAX)
+            {
+                outputs_pwm[i] = PWM_MAX;
+            }else{
+                // Apply this pwmError to the outputs_pwm array
+                outputs_pwm[i] += (uint16_t)floor(pwmError);
+            }
+
             Serial.print("outputs_pwm[");
             Serial.print(i);
             Serial.print("] += ");
