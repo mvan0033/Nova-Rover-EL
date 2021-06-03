@@ -358,7 +358,7 @@ class ControlLoop
 
 private:
     /* HOW MANY MOSFET BOARDS DO WE HAVE */
-    int8_t mosfetModuleCount = 3;
+    int8_t mosfetModuleCount = 4;
 
     /* Control loop targets */
     bool controlLoopRunning = false; // If false, set all outputs to zero. If true we enable control loop.
@@ -449,7 +449,7 @@ private:
     {
         // Depending on mode we calculate target error.
         double latestReadings[4] = {0,0,0,0};
-        double perChannelTarget = (double)targetValue / mosfetModuleCount;
+        double perChannelTarget = (double)targetValue / (double)mosfetModuleCount;
 
         if(targetMode == 0)
         {
@@ -505,7 +505,7 @@ private:
     /* Check current, power, temperature limits */
     int8_t check_current_limits()
     {
-        double perChannelLimit = currentLimit / mosfetModuleCount;
+        double perChannelLimit = (double)currentLimit / (double)mosfetModuleCount;
         for(int i = 0; i<4; i++)
         {
             if(readings_current[i] > perChannelLimit)
@@ -521,7 +521,7 @@ private:
 
     int8_t check_power_limits()
     {
-        double perChannelLimit = currentLimit / mosfetModuleCount;
+        double perChannelLimit = (double)currentLimit / (double)mosfetModuleCount;
         perChannelLimit = perChannelLimit * readings_voltage[load_voltage_channel]; // TODO: CHANGE TO PROPER VOLTAGE READING CHANNEL
 
         for(int i = 0; i<4; i++)
