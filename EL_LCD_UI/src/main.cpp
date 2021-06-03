@@ -779,12 +779,13 @@ void loop()
   // Update global variables every 1 seconds
   if (millis() - referenceTime > 1000)
   {
-    // curCurrent = controller.get_total_current();
-    // curPower = controller.get_total_power();
-    curCurrent = rand();
-    curPower = rand();
+    curCurrent = controller.get_total_current();
+    curPower = controller.get_total_power();
+    // curCurrent = rand();
+    // curPower = rand();
     elapsedTime = int(millis() / 1000) - int(timeOffset / 1000);
-    hotTemp = rand();
+    // hotTemp = rand();
+    hotTemp = controller.get_highest_temperature();
 
     // Refresh screen
     if (screen == 11)
@@ -797,7 +798,7 @@ void loop()
     }
 
     // Check elapsed time against time limit
-    if (elapsedTime / 60.0 >= timeLimit && (screen == 11 || screen == 12))
+    if (elapsedTime / 60.0 >= timeLimit && controller.get_pwm_active_state())
     {
       // Terminate Analaysis
       controller.set_enable(false);
