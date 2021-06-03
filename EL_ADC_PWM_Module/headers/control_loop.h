@@ -383,7 +383,7 @@ private:
     double readings_voltage[4] = {0,0,0,0};
 
     /* PMW Output variables */
-    int16_t outputs_pwm[4] = {0,0,0,0};
+    uint16_t outputs_pwm[4] = {0,0,0,0};
     double pwm_proportional_coeff = 10; // Multiply error from targetValue to get this.
     double pwm_rate_limit = 100; // 1000 per update rate.
 
@@ -427,11 +427,11 @@ private:
             }
 
             // Apply this pwmError to the outputs_pwm array
-            outputs_pwm[i] += (int16_t)floor(pwmError);
+            outputs_pwm[i] += (uint16_t)floor(pwmError);
             Serial.print("outputs_pwm[");
             Serial.print(i);
             Serial.print("] += ");
-            Serial.println((int16_t)floor(pwmError));
+            Serial.println((uint16_t)floor(pwmError));
 
 
             // Clamp outputs_PWM to 0 and PWM_MAX
