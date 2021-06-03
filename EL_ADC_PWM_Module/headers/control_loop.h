@@ -22,7 +22,7 @@
 #define NUM_TLC59711 1
 #define data 6
 #define clock 5
-#define PWM_MAX 65534
+#define PWM_MAX 65535
 
 #if NO_HARDWARE_MODE == 0
 // PWM MODULE OBJECT.
@@ -158,8 +158,8 @@ class ControlLoop
             }
 
             // Print the readings
-            Serial.println(" ");
-            print_all_readings();
+            // Serial.println(" ");
+            // print_all_readings();
 
             // Update the target error
             update_target_error();
@@ -198,6 +198,7 @@ class ControlLoop
 
     void reset_errors()
     {
+        reset_pwm_arrays_to_zero();
         /* Resets an error state */
         controlLoopError = false;
     }
@@ -373,9 +374,9 @@ private:
     double targetErrors[4] = {0,0,0,0}; // Calculated error from our targetValue, identified PER-CHANNEL.
 
     /* GLOBAL SAFETY LIMITS */
-    int8_t currentLimit = 100; // AMPS
-    int8_t powerLimit = 1000;  // WATTS
-    int8_t temperatureLimit = 600;  // DEGREES C
+    int16_t currentLimit = 100; // AMPS
+    int16_t powerLimit = 1000;  // WATTS
+    int16_t temperatureLimit = 600;  // DEGREES C
 
     /* Latest ADC readings per channel */
     double readings_temperature[4] = {0,0,0,0};
@@ -384,8 +385,10 @@ private:
 
     /* PMW Output variables */
     uint16_t outputs_pwm[4] = {0,0,0,0};
-    double pwm_proportional_coeff = 10; // Multiply error from targetValue to get this.
-    double pwm_rate_limit = 100; // 1000 per update rate.
+    
+    double pwm_proportional_coeff = 1000; // Multiply error from targetValue to get this.
+    double pwm_rate_limit = 1000; // 1000 per update rate.
+    double pwm_rate_limit_slow = 5; // Pwm change when very close to target 
 
     /* Apply per-channel PWM */
     void apply_pwm_output_values()
@@ -395,17 +398,16 @@ private:
             pwm_set_duty(&pwm_module,1,outputs_pwm[1]);
             pwm_set_duty(&pwm_module,2,outputs_pwm[2]);
             pwm_set_duty(&pwm_module,3,outputs_pwm[3]);
-        #else
-            Serial.println("APPLYING PWM OUTPUTS");
-            Serial.print("CH0: ");
-            Serial.println(outputs_pwm[0]);
-            Serial.print("CH1: ");
-            Serial.println(outputs_pwm[1]);
-            Serial.print("CH2: ");
-            Serial.println(outputs_pwm[2]);
-            Serial.print("CH3: ");
-            Serial.println(outputs_pwm[3]);
-            
+        // #else
+            // Serial.println("APPLYING PWM OUTPUTS");
+            // Serial.print("CH0: ");
+            // Serial.println(outputs_pwm[0]);
+            // Serial.print("CH1: ");
+            // Serial.println(outputs_pwm[1]);
+            // Serial.print("CH2: ");
+            // Serial.println(outputs_pwm[2]);
+            // Serial.print("CH3: ");
+            // Serial.println(outputs_pwm[3]);
         #endif
     }
 
@@ -416,47 +418,67 @@ private:
         {
             double pwmError = targetErrors[i] * pwm_proportional_coeff;
 
-            // Clamp to pwm_proportional coeff
-            if(pwmError > pwm_rate_limit)
+            // Adjust ramp speed depending on region of base voltage.
+            if(outputs_pwm[i] > 52428-pwm_rate_limit)
             {
-                pwmError = pwm_rate_limit;
-            }
-            if(pwmError < -pwm_rate_limit)
-            {
-                pwmError = -pwm_rate_limit;
-            }
-
-            uint32_t overflowCheck = outputs_pwm[i] + (uint16_t)floor(pwmError);
-
-            // Check overflow condition
-            if(overflowCheck >= PWM_MAX)
-            {
-                outputs_pwm[i] = PWM_MAX;
+                Serial.print("SLOW,");
+                if(pwmError > pwm_rate_limit_slow)
+                {
+                    pwmError = pwm_rate_limit_slow;
+                }
+                if(pwmError < -pwm_rate_limit_slow)
+                {
+                    pwmError = -pwm_rate_limit_slow;
+                }
             }else{
-                // Apply this pwmError to the outputs_pwm array
-                outputs_pwm[i] += (uint16_t)floor(pwmError);
+                Serial.print("FAST,");
+                // Clamp to pwm_proportional coeff
+                if(pwmError > pwm_rate_limit)
+                {
+                    pwmError = pwm_rate_limit;
+                }
+                if(pwmError < -pwm_rate_limit)
+                {
+                    pwmError = -pwm_rate_limit;
+                }
+            }
+            
+            // Store value before increment
+            uint16_t preUpdateValue = (uint16_t)outputs_pwm[i];
+            int16_t pwmIncrement = (int16_t)floor(pwmError);
+            // Perform increment
+            outputs_pwm[i] += pwmIncrement;
+
+            // Check for overflow, if we increased in a positive direction.
+            if(pwmIncrement > 0)
+            {
+                if(outputs_pwm[i] < preUpdateValue)
+                {
+                    // Overflow occured. Clamp to MAX.
+                    outputs_pwm[i] = PWM_MAX;
+                }
+            }
+            // Check for underflow, if we decreased the pwm value.
+            if(pwmIncrement < 0)
+            {
+                if(outputs_pwm[i] > preUpdateValue)
+                {
+                    // Underflow occured. Clamp to zero
+                    outputs_pwm[i] = 0;
+                }
             }
 
             Serial.print("outputs_pwm[");
             Serial.print(i);
             Serial.print("] += ");
-            Serial.println((uint16_t)floor(pwmError));
-
-
-            // Clamp outputs_PWM to 0 and PWM_MAX
-            if(outputs_pwm[i] < 0)
-            {
-                outputs_pwm[i] = 0;
-            }
-            if(outputs_pwm[i] > PWM_MAX)
-            {
-                outputs_pwm[i] = PWM_MAX;
-            }
+            Serial.println(pwmIncrement);
         }
 
+        Serial.println("");
+
         // Print the output efforts
-        Serial.print("PWM Outputs: ");
-        print_output_array(outputs_pwm);
+        // Serial.print("PWM Outputs: ");
+        // print_output_array(outputs_pwm);
     }
 
     /* Update the targetErrors per channel */
@@ -491,8 +513,8 @@ private:
             targetErrors[i] = error;
         }
         
-        Serial.print("Target Errors: ");
-        print_reading_array(targetErrors);
+        // Serial.print("Target Errors: ");
+        // print_reading_array(targetErrors);
     }
 
     /* Print messages as a result of limit exceed */
@@ -584,10 +606,10 @@ private:
         #else
             // In no hardware mode, we set all temperatures to 30 deg, plus some random noise.
             // We also simulate the time it takes to perform a reading by delaying here.
-            readings_temperature[0] = 30 + (float)random(-20,20)/10;
-            readings_temperature[1] = 30 + (float)random(-20,20)/10;
-            readings_temperature[2] = 30 + (float)random(-20,20)/10;
-            readings_temperature[3] = 30 + (float)random(-20,20)/10;
+            readings_temperature[0] = 30 + (float)(random(0,40)-20)/100;
+            readings_temperature[1] = 30 + (float)(random(0,40)-20)/100;
+            readings_temperature[2] = 30 + (float)(random(0,40)-20)/100;
+            readings_temperature[3] = 30 + (float)(random(0,40)-20)/100;
             
             // At 14-bit precision, we can expect ~66 ms delay for a 4-IC reading.
             // See MCP3424 for samples-per-second figures, to determine this.
@@ -607,21 +629,37 @@ private:
     {
         /* Returns a fake current throughput, assuming V_DS == 10V,
             given a base voltage.
-
             This was done from our real-world data, and equations derived from trendlines.
         */
-        // The equation is piece-wise, with two different exponential regions.
-        // They intersection about the ~4V mark.
-        // Equation 1 (<4V GS, very low current)
-        double eq1_current = (double)(2.5923060142355E-15) * exp(8.1407449923113 * vgs);
-        double eq2_current = 734.04065811719 * pow(vgs,2) - 5824.45578150388 * vgs + 11554.22728209;
+        // Trend 1, 3.4>3.95
+        double trend1 = 0.4629629629629629 * vgs -1.574074074074074;
+        // Trend 2, 3.95>4.0
+        double trend2 = 12.49999999999999 * vgs -48.99999999999996;
+        // Trend 3, 4.0 > 5.0
+        double trend3 = 749.0 * vgs - 2995.0;
 
-        // Intersection calculated with wolfram alpha.
-        if(vgs < 3.96739)
+        if(trend1 < 0)
         {
-            return eq1_current;
+            trend1 = 0;
+        }
+        if(trend2 < 0)
+        {
+            trend2 = 0;
+        }
+        if(trend3 < 0)
+        {
+            trend3 = 0;
+        }        
+        
+        if(vgs <= 3.4)
+        {
+            return 0;
+        }else if(vgs <= 3.94){
+            return trend1;
+        }else if(vgs <= 4.0){
+            return trend2;
         }else{
-            return eq2_current;
+            return trend3;
         }
     }
 
@@ -646,10 +684,24 @@ private:
             // Then used the curve equation here to make it 'semi-realistic'
             // Also added noise! (+/- 0.2A)    
         
-            readings_current[0] = fake_mosfet_model(5*(outputs_pwm[0]/65535)) + (float)random(-20,20)/10;
-            readings_current[1] = fake_mosfet_model(5*(outputs_pwm[1]/65535)) + (float)random(-20,20)/10;
-            readings_current[2] = fake_mosfet_model(5*(outputs_pwm[2]/65535)) + (float)random(-20,20)/10;
-            readings_current[3] = fake_mosfet_model(5*(outputs_pwm[3]/65535)) + (float)random(-20,20)/10;
+            double baseVoltage1 = (double)5*(double)outputs_pwm[0]/(double)65535;
+            double baseVoltage2 = (double)5*(double)outputs_pwm[1]/(double)65535;
+            double baseVoltage3 = (double)5*(double)outputs_pwm[2]/(double)65535;
+            double baseVoltage4 = (double)5*(double)outputs_pwm[3]/(double)65535;
+
+            Serial.println("BASE VOLTAGES");
+            Serial.print(baseVoltage1,6);
+            Serial.print(",");
+            Serial.print(baseVoltage2,6);
+            Serial.print(",");
+            Serial.print(baseVoltage3,6);
+            Serial.print(",");
+            Serial.println(baseVoltage4,6);
+
+            readings_current[0] = fake_mosfet_model(baseVoltage1) + (double)(random(0,40)-20)/100;
+            readings_current[1] = fake_mosfet_model(baseVoltage2) + (double)(random(0,40)-20)/100;
+            readings_current[2] = fake_mosfet_model(baseVoltage3) + (double)(random(0,40)-20)/100;
+            readings_current[3] = fake_mosfet_model(baseVoltage4) + (double)(random(0,40)-20)/100;
             
             // At 14-bit precision, we can expect ~66 ms delay for a 4-IC reading.
             // See MCP3424 for samples-per-second figures, to determine this.
@@ -683,7 +735,7 @@ private:
             readings_voltage[3] = (float)random(-200,200)/10;
 
             // System load. 10th volt noise
-            readings_voltage[load_voltage_channel] = 10 + (float)random(-10,10)/10;
+            readings_voltage[load_voltage_channel] = 10 + (float)random(-10,10)/(float)100;
         #endif
 
         // Override if nan, or <0
