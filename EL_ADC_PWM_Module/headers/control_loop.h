@@ -350,10 +350,10 @@ class ControlLoop
         // Here, we just check if all outputs are zero.
         if(outputs_pwm[0] == 0 && outputs_pwm[1] == 0 && outputs_pwm[2] == 0 && outputs_pwm[3] == 0)
         {
-            return true;
+            return false;
         }
 
-        return false;
+        return true;
     }
 
 private:
