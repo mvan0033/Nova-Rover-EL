@@ -328,6 +328,21 @@ class ControlLoop
         return readings_voltage[load_voltage_channel];
     }
 
+    double get_highest_temperature()
+    {
+        // Returns highest of the temperature readings
+        double temp = readings_temperature[0];
+        for(int i = 0; i<4; i++)
+        {
+            if(readings_temperature[i] > temp)
+            {
+                temp = readings_temperature[i];
+            }
+        }
+
+        return temp;
+    }
+
     bool get_pwm_active_state()
     {
         // Returns a boolean that signifies if PWM outputs are enabled or not.
@@ -369,8 +384,8 @@ private:
 
     /* PMW Output variables */
     int16_t outputs_pwm[4] = {0,0,0,0};
-    double pwm_proportional_coeff = 100; // Multiply error from targetValue to get this.
-    int16_t pwm_rate_limit = 1000; // 1000 per update rate.
+    double pwm_proportional_coeff = 10; // Multiply error from targetValue to get this.
+    int16_t pwm_rate_limit = 100; // 1000 per update rate.
 
     /* Apply per-channel PWM */
     void apply_pwm_output_values()
