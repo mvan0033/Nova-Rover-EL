@@ -427,7 +427,8 @@ private:
             }
 
             // Apply this pwmError to the outputs_pwm array
-            outputs_pwm[i] += pwmError;
+            outputs_pwm[i] += (int16_t)floor(pwmError);
+            
             // Clamp outputs_PWM to 0 and PWM_MAX
             if(outputs_pwm[i] < 0)
             {
