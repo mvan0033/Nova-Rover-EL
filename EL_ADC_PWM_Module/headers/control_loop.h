@@ -22,7 +22,7 @@
 #define NUM_TLC59711 1
 #define data 6
 #define clock 5
-#define PWM_MAX 65535
+#define PWM_MAX 65534
 
 #if NO_HARDWARE_MODE == 0
 // PWM MODULE OBJECT.
@@ -426,8 +426,10 @@ private:
                 pwmError = -pwm_rate_limit;
             }
 
+            uint32_t overflowCheck = outputs_pwm[i] + (uint16_t)floor(pwmError);
+
             // Check overflow condition
-            if(outputs_pwm[i] + (uint16_t)floor(pwmError) >= PWM_MAX)
+            if(overflowCheck >= PWM_MAX)
             {
                 outputs_pwm[i] = PWM_MAX;
             }else{
