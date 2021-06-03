@@ -64,9 +64,9 @@ int lowVoltageDigit3; // Tenths digit
 float lowVoltage;
 
 // Misc Variables
-float curCurrent;
-float curPower;
-float hotTemp;
+double curCurrent;
+double curPower;
+double hotTemp;
 int elapsedTime;
 int lcdAddress = 0x27;
 int screen = 1;
