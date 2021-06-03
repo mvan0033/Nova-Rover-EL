@@ -385,7 +385,7 @@ private:
     /* PMW Output variables */
     int16_t outputs_pwm[4] = {0,0,0,0};
     double pwm_proportional_coeff = 10; // Multiply error from targetValue to get this.
-    int16_t pwm_rate_limit = 100; // 1000 per update rate.
+    double pwm_rate_limit = 100; // 1000 per update rate.
 
     /* Apply per-channel PWM */
     void apply_pwm_output_values()
