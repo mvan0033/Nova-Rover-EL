@@ -61,12 +61,13 @@ float timeLimit = 1;
 int lowVoltageDigit1; // Tens digit
 int lowVoltageDigit2; // Units digit
 int lowVoltageDigit3; // Tenths digit
-float lowVoltage;
+double lowVoltage;
 
 // Misc Variables
 double curCurrent;
 double curPower;
 double hotTemp;
+const double MAX_TEMPERATURE = 50;
 int elapsedTime;
 int lcdAddress = 0x27;
 int screen = 1;
@@ -99,6 +100,7 @@ void buzzer()
 // Start up screen
 void screen0(uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, int16_t year)
 {
+  screen = 0;
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("MONASH NOVA");
@@ -109,7 +111,14 @@ void screen0(uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, int16_t y
   lcd.setCursor(3, 0);
   lcd.print(hour);
   lcd.print(":");
+
+  // Padding the minutes if necessary
+  if (minute < 10)
+  {
+    lcd.print("0");
+  }
   lcd.print(minute);
+  
   lcd.print(" (");
   lcd.print(day);
   lcd.print("/");
@@ -122,6 +131,7 @@ void screen0(uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, int16_t y
 // Current/power mode selection
 void screen1()
 {
+  screen = 1;
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Current Mode");
@@ -135,6 +145,8 @@ void screen1()
 // Setting current value
 void screen2()
 {
+  screen = 2;
+
   // Calculate current value
   current = currentDigit1 * pow(10, 1) + currentDigit2;
 
@@ -156,6 +168,8 @@ void screen2()
 // Setting power value
 void screen3()
 {
+  screen = 3;
+
   // Calculate power value
   power = powerDigit1 * pow(10, 1) + powerDigit2;
 
@@ -177,6 +191,8 @@ void screen3()
 // Adjusting current
 void screen4()
 {
+  screen = 4;
+
   // Calculate current value
   current = currentDigit1 * pow(10, 1) + currentDigit2;
 
@@ -202,6 +218,8 @@ void screen4()
 // Adjusting power
 void screen5()
 {
+  screen = 5;
+
   // Calculate power value
   power = powerDigit1 * pow(10, 1) + powerDigit2;
 
@@ -227,6 +245,7 @@ void screen5()
 // Prompt user for data logging
 void screen6()
 {
+  screen = 6;
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Data logging?");
@@ -244,6 +263,8 @@ void screen6()
 // Prompt user for time limit
 void screen7()
 {
+  screen = 7;
+
   // Calculate time limit value
   timeLimit = timeLimitDigit1 * pow(10, 2) + timeLimitDigit2 * pow(10, 1) + timeLimitDigit3;
 
@@ -265,6 +286,8 @@ void screen7()
 // Adjusting time limit
 void screen8()
 {
+  screen = 8;
+
   // Calculate time limit value
   timeLimit = timeLimitDigit1 * pow(10, 2) + timeLimitDigit2 * pow(10, 1) + timeLimitDigit3;
 
@@ -296,6 +319,8 @@ void screen8()
 // Prompt user for low-voltage cut-off
 void screen9()
 {
+  screen = 9;
+
   // Calculate low voltage value
   lowVoltage = lowVoltageDigit1 * pow(10, 1) + lowVoltageDigit2 + lowVoltageDigit3 * pow(10, -1);
 
@@ -319,6 +344,8 @@ void screen9()
 // Adjusting low-voltage cut-off
 void screen10()
 {
+  screen = 10;
+
   // Calculate low voltage value
   lowVoltage = lowVoltageDigit1 * pow(10, 1) + lowVoltageDigit2 + lowVoltageDigit3 * pow(10, -1);
 
@@ -347,6 +374,8 @@ void screen10()
 // Display system monitor for current
 void screen11()
 {
+  screen = 11;
+
   // Set the current mode and output
   controller.set_target_mode(0);
   controller.set_target_value(current);
@@ -378,6 +407,9 @@ void screen11()
 // Display system monitor for power
 void screen12()
 {
+  screen = 12;
+
+  // Set to power mode and output
   controller.set_target_mode(1);
   controller.set_target_value(power);
 
@@ -408,6 +440,7 @@ void screen12()
 // No/invaild SD card
 void screen13()
 {
+  screen = 13;
   lcd.clear();
   lcd.setCursor(1, 0);
   lcd.print("NO/INVALID");
@@ -421,10 +454,11 @@ void screen13()
 // Overtemperature error
 void screen14()
 {
+  screen = 14;
   lcd.clear();
-  lcd.setCursor(0, 1);
+  lcd.setCursor(1, 0);
   lcd.print("OVERTEMPERATURE");
-  lcd.setCursor(5, 2);
+  lcd.setCursor(2, 2);
   lcd.print("ERROR");
 
   // Play sound to indicate overtemperature error
@@ -434,11 +468,14 @@ void screen14()
 // Low-voltage error
 void screen15()
 {
+  screen = 15;
   lcd.clear();
-  lcd.setCursor(3, 1);
+  lcd.setCursor(0, 0);
   lcd.print("LOW VOLTAGE");
+  lcd.setCursor(1, 0);
+  lcd.print("CUT-OFF");
   lcd.setCursor(2, 0);
-  lcd.print("CUT-OFF TERMINATION");
+  lcd.print("TERMINATION");
 
   // Play sound to indicate low-voltage error
   buzzer();
@@ -447,6 +484,7 @@ void screen15()
 // Analysis complete
 void screen16()
 {
+  screen = 16;
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("ANALYSIS");
@@ -463,6 +501,7 @@ void screen16()
 // Early termination
 void screen17()
 {
+  screen = 17;
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("ANALYSIS");
@@ -476,6 +515,7 @@ void screen17()
 // Confirm early termination
 void screen18()
 {
+  screen = 18;
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Terminate");
@@ -646,7 +686,6 @@ void changeDigit(int *digitToChange)
 
 //     // NO/INVALID SD CARD screen
 //     screen13();
-//     screen = 13;
 //   }
 //   else
 //   {
@@ -751,8 +790,6 @@ void setup()
   screen0(now.minute(), now.hour(), now.day(), now.month(), now.year());
   delay(4000);
   screen1();
-  lcd.setCursor(0, 0);
-  lcd.write(byte(62)); // 62 is arrow character, 32 is empty character
 
   // Initialise EL as off
   controller.set_enable(false);
@@ -779,12 +816,10 @@ void loop()
   // Update global variables every 1 seconds
   if (millis() - referenceTime > 1000)
   {
+    // Update variables for system monitor
     curCurrent = controller.get_total_current();
     curPower = controller.get_total_power();
-    // curCurrent = rand();
-    // curPower = rand();
     elapsedTime = int(millis() / 1000) - int(timeOffset / 1000);
-    // hotTemp = rand();
     hotTemp = controller.get_highest_temperature();
 
     // Refresh screen
@@ -805,16 +840,31 @@ void loop()
 
       // Analysis complete screen
       screen16();
-      screen = 16;
     }
 
-    // TODO: Check voltage against low voltage limit
+    // Check system voltage against low voltage limit
+    else if (controller.get_total_voltage() < lowVoltage && controller.get_pwm_active_state())
+    {
+      // Terminate Analaysis
+      controller.set_enable(false);
+
+      // Low voltage cut-off screen
+      screen15();
+    }
+
+    // Check temperature against max temperature limit
+    else if (controller.get_highest_temperature() > MAX_TEMPERATURE && controller.get_pwm_active_state())
+    {
+      // Terminate Analaysis
+      controller.set_enable(false);
+
+      // Overtemperature error screen
+      screen14();
+    }
 
     // Update reference time
     referenceTime = millis();
   }
-
-  delay(60);
 
   if (turnDetected)
   {
@@ -1041,14 +1091,12 @@ void loop()
       if (cursorPosition == 1)
       {
         screen3();
-        screen = 3;
         powerMode = true;
       }
       // If current mode is selected
       else
       {
         screen2();
-        screen = 2;
         powerMode = false;
       }
       break;
@@ -1062,19 +1110,16 @@ void loop()
       {
         // Display current changing screen
         screen4();
-        screen = 4;
         break;
       }
       case 1: // Next
       {
         screen6();
-        screen = 6;
         break;
       }
       case 2: // Back
       {
         screen1();
-        screen = 1;
         break;
       }
       break;
@@ -1089,19 +1134,16 @@ void loop()
       case 0: // Set power
       {
         screen5();
-        screen = 5;
         break;
       }
       case 1: // Next
       {
         screen6();
-        screen = 6;
         break;
       }
       case 2: // Back
       {
         screen1();
-        screen = 1;
         break;
       }
       }
@@ -1128,7 +1170,6 @@ void loop()
       default: // Continue to next screen and reset selectedDigit
       {
         screen2();
-        screen = 2;
         selectedDigit = 0;
       }
       }
@@ -1171,7 +1212,6 @@ void loop()
       default: // Continue to next screen and reset selectedDigit
       {
         screen3();
-        screen = 3;
         selectedDigit = 0;
       }
       }
@@ -1185,14 +1225,12 @@ void loop()
       case 0: // Yes
       {
         screen7();
-        screen = 7;
         // initialiseSD();
         break;
       }
       case 1: // No
       {
         screen7();
-        screen = 7;
         break;
       }
       case 2: // Back
@@ -1200,12 +1238,10 @@ void loop()
         if (powerMode)
         {
           screen3();
-          screen = 3;
         }
         else
         {
           screen2();
-          screen = 2;
         }
         break;
       }
@@ -1220,21 +1256,18 @@ void loop()
       case 0: // Set Low voltage cut-off
       {
         screen8();
-        screen = 8;
         break;
       }
 
       case 1: // Next
       {
         screen9();
-        screen = 9;
         break;
       }
 
       case 2: // Back
       {
         screen6();
-        screen = 6;
         break;
       }
       }
@@ -1270,7 +1303,6 @@ void loop()
       default: // Continue to next screen and reset selectedDigit
       {
         screen7();
-        screen = 7;
         selectedDigit = 0;
       }
       }
@@ -1284,7 +1316,6 @@ void loop()
       case 0: // Set Low voltage cut-off
       {
         screen10();
-        screen = 10;
         break;
       }
 
@@ -1298,12 +1329,10 @@ void loop()
         if (powerMode)
         {
           screen12();
-          screen = 12;
         }
         else
         {
           screen11();
-          screen = 11;
         }
 
         break;
@@ -1312,7 +1341,6 @@ void loop()
       case 2: // Back
       {
         screen7();
-        screen = 7;
         break;
       }
       }
@@ -1348,7 +1376,6 @@ void loop()
       default: // Continue to next screen and reset selectedDigit
       {
         screen9();
-        screen = 9;
         selectedDigit = 0;
       }
       }
@@ -1358,50 +1385,42 @@ void loop()
     case 11: // Current monitor screen
     {
       screen18();
-      screen = 18;
       break;
     }
 
     case 12: // Power monitor screen
     {
       screen18();
-      screen = 18;
       break;
     }
 
     case 13: // No/invaid SD card screen
     {
       screen6();
-      screen = 6;
       break;
     }
 
     case 14: // Overtemperature screen
     {
-      screen1();
-      screen = 1;
+      screen16();
       break;
     }
 
     case 15: // Low-voltage cut-off termination screen
     {
-      screen1();
-      screen = 1;
+      screen16();
       break;
     }
 
     case 16: // Analysis complete screen
     {
       screen1();
-      screen = 1;
       break;
     }
 
     case 17: // Analysis terminated screen
     {
       screen1();
-      screen = 1;
-
       break;
     }
     
@@ -1413,7 +1432,6 @@ void loop()
       case 0: // Yes
       {
         screen17();
-        screen = 17;
 
         // Terminate Analaysis
         controller.set_enable(false);
@@ -1425,12 +1443,10 @@ void loop()
         if (powerMode)
         {
           screen12();
-          screen = 12;
         }
         else
         {
           screen11();
-          screen = 11;
         }
         break;
       }
