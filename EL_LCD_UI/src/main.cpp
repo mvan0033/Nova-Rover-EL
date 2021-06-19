@@ -1,7 +1,7 @@
 /* Program to implement the logic and user interface for an Ardunio Nano on the Monash Nova Rover Electronic Load.
 
 Written by Matt van Wijk
-Date: 11/05/2021
+Last modified: 19/06/2021
 */
 
 // Initially set power limit to 100W
@@ -22,7 +22,7 @@ RTC_PCF8523 rtc;
 DateTime now;
 
 // SD card object which handles SD Card hardware
-// File dataFile;
+File dataFile;
 
 // Global variables
 // Defining Pins
@@ -74,11 +74,9 @@ int screen = 1;
 int cursorPosition;
 int selectedDigit;
 bool dataLogging;
-bool SdCardPresent = true;
 bool powerMode;
 unsigned long referenceTime = millis();
 unsigned long timeOffset;
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 // Creating LCD object
 LiquidCrystal_I2C lcd(lcdAddress, 128, 64);
@@ -119,13 +117,12 @@ void screen0(uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, int16_t y
   }
   lcd.print(minute);
   
-  lcd.print(" (");
+  lcd.print(" ");
   lcd.print(day);
   lcd.print("/");
   lcd.print(month);
   lcd.print("/");
   lcd.print(year);
-  lcd.print(")");
 }
 
 // Current/power mode selection
@@ -442,11 +439,11 @@ void screen13()
 {
   screen = 13;
   lcd.clear();
-  lcd.setCursor(1, 0);
+  lcd.setCursor(0, 0);
   lcd.print("NO/INVALID");
-  lcd.setCursor(1, 1);
+  lcd.setCursor(1, 0);
   lcd.print("SD CARD");
-  lcd.setCursor(1, 2);
+  lcd.setCursor(2, 0);
   lcd.write(byte(62));
   lcd.print("Back");
 }
@@ -494,6 +491,12 @@ void screen16()
   lcd.print("REMOVE SD CARD");
   elapsedTime = 0;
 
+  // Close dataFile
+  if (dataLogging)
+  {
+    dataFile.close();
+  }
+
   // Play sound to indicate analysis complete
   buzzer();
 }
@@ -507,6 +510,12 @@ void screen17()
   lcd.print("ANALYSIS");
   lcd.setCursor(1, 0);
   lcd.print("TERMINATED");
+
+  // Close dataFile
+  if (dataLogging)
+  {
+    dataFile.close();
+  }
 
   // Play sound to indicate early termination
   buzzer();
@@ -670,50 +679,63 @@ void changeDigit(int *digitToChange)
 }
 
 // // Function to log system data to external SD card
-// void writeDataToSD()
-// {
+void writeDataToSD()
+{
+  // TODO: Print data to SD card
+  dataFile.print(elapsedTime);
+  dataFile.print(", ");
+  dataFile.print(controller.get_total_voltage());
+  dataFile.print(", ");
+}
 
-// }
+// Function to initialise SD Card 
+void initialiseSD()
+{  
+  // See if the card is present and can be initialized:
+  if (!SD.begin(SD_CHIP_SELECT_PIN)) 
+  {
+    // Print to console
+    Serial.println("Card failed, or not present");
 
-// // Function to initialise SD Card 
-// void initialiseSD()
-// {  
-//   // See if the card is present and can be initialized:
-//   if (!SD.begin(SD_CHIP_SELECT_PIN)) 
-//   {
-//     // Print to console
-//     Serial.println("Card failed, or not present");
+    // NO/INVALID SD CARD screen
+    screen13();
+  }
+  else
+  {
+    // SD is present and working 
+    Serial.println("card initialized.");
 
-//     // NO/INVALID SD CARD screen
-//     screen13();
-//   }
-//   else
-//   {
-//     // SD is present and working 
-//     Serial.println("card initialized.");
+    // Create DateTime object for printing/displaying date & time
+    now = rtc.now();
 
-//     // Create DateTime object for printing/displaying date & time
-//     now = rtc.now();
-
-//     // Format filename for SD card
-//     char filename[20];
-//     sprintf(filename, "Time_%d-%d__Date_%d-%d-%d", int(now.hour()), int(now.minute()), int(now.day()), int(now.month()), int(now.year()));
-//     Serial.println(filename);
+    // Format filename for SD card
+    char filename[20];
+    sprintf(filename, "Time_%d-%d__Date_%d-%d-%d", int(now.hour()), int(now.minute()), int(now.day()), int(now.month()), int(now.year()));
+    Serial.println(filename);
   
-//     // Open file to write to
-//     dataFile = SD.open(filename, FILE_WRITE);
+    // Open file to write to
+    dataFile = SD.open(filename, FILE_WRITE);
 
-//     // Check for errors opening file
-//     if (!dataFile) 
-//     {
-//       Serial.println("error opening datalog.txt");
-//     }
-//     else
-//     {
-//       dataLogging = true;
-//     }
-//   }
-// }
+    // Check for errors opening file
+    if (!dataFile) 
+    {
+      Serial.println("error opening datalog.txt");
+      screen13();
+    }
+    else
+    {
+      dataLogging = true;
+
+      // Print data headings
+      dataFile.println("Time (s), System Voltage (V), Voltage1 (V), Voltage2 (V), Voltage3 (V), Mode, Mode Target, Mode Value, " 
+      "Temperature1 (C), Temperature2 (C), Temperature3 (C), Temperature4 (C), Current1 (A), Current2 (A), Current3 (A), Current4 (A), PWM1, PWM2, "
+      "PWM3, PWM4");
+
+      // Move to next screen
+      screen7();
+    }
+  }
+}
 
 // ISR for when a turn is detected from the rotary encoder
 void isr0()
@@ -725,13 +747,23 @@ void isr0()
 }
 
 // ISR for when the button on the rotary encoder is pressed
-ISR(PCINT2_vect)
+// PCINT2_vect
+//#define PORTC_PORT_vect 0x30
+// ISR(PORTC_PORT_vect)
+// {
+//   if (digitalRead(rotary_encoder_sw) == LOW)
+//   {
+//     buttonPressed = true;
+//   }
+// }
+void isr1()
 {
   if (digitalRead(rotary_encoder_sw) == LOW)
   {
     buttonPressed = true;
   }
 }
+
 
 void setup()
 {
@@ -777,14 +809,18 @@ void setup()
   pinMode(SD_CHIP_SELECT_PIN, OUTPUT);
 
   // Setting up ISR for rotary encoder button
-  PCICR |= 0b00000100;
-  PCMSK2 |= 0b00010000; // turn on PCINT20(D4)
+  // PCICR |= 0b00000100;
+  // PCMSK2 |= 0b00010000; // turn on PCINT20(D4)
+  // PORTC.PIN6CTRL |= 0b00000010;
+  // #define WRITE_PIN6CTRL(val) ((*(volatile uint32_t *)0x16) = (val));
+  // WRITE_PIN6CTRL(0b00000010); // set pin 6 as interrupt on rising edge
 
   // Setting up serial monitor
   Serial.begin(9600);
 
   // Setting up ISR for turning event
   attachInterrupt(digitalPinToInterrupt(rotary_encoder_dt), isr0, RISING);
+  attachInterrupt(digitalPinToInterrupt(rotary_encoder_sw), isr1, CHANGE);
 
   // Beginning the LCD start sequence
   screen0(now.minute(), now.hour(), now.day(), now.month(), now.year());
@@ -821,8 +857,7 @@ void loop()
     curPower = controller.get_total_power();
     elapsedTime = int(millis() / 1000) - int(timeOffset / 1000);
     hotTemp = controller.get_highest_temperature();
-
-    // Refresh screen
+    
     if (screen == 11)
     {
       screen11();
@@ -847,7 +882,7 @@ void loop()
     {
       // Terminate Analaysis
       controller.set_enable(false);
-
+      
       // Low voltage cut-off screen
       screen15();
     }
@@ -868,7 +903,7 @@ void loop()
 
   if (turnDetected)
   {
-    delay(50);
+    // delay(50);
     switch (screen)
     {
     case 1: // Current/Power selection screen
@@ -1081,7 +1116,7 @@ void loop()
   {
     // Reset buttonPressed
     buttonPressed = false;
-    delay(200);
+    // delay(200);
 
     switch (screen)
     {
@@ -1224,8 +1259,7 @@ void loop()
       {
       case 0: // Yes
       {
-        screen7();
-        // initialiseSD();
+        initialiseSD();
         break;
       }
       case 1: // No

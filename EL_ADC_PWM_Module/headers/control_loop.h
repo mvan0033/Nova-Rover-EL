@@ -12,8 +12,8 @@
 #include <Wire.h>
 #include <SPI.h>
 
-#include <MCP342x.h>
-#include "Adafruit_TLC59711.h"
+#include "MCP342x.h"
+#include <Adafruit_TLC59711.h>
 
 #include "utils.h"
 #include "pwm_utils.h"

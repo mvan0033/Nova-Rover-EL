@@ -1,4 +1,4 @@
-#include "Adafruit_TLC59711.h"
+#include <Adafruit_SPIDevice.h>
 
 void pwm_set_duty(Adafruit_TLC59711 *pwm_obj, uint8_t channel, uint16_t pwmValue)
 {
