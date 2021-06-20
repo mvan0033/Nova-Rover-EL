@@ -4,6 +4,10 @@ Written by Matt van Wijk
 Last modified: 19/06/2021
 */
 
+// TODO: Log data to SD card
+// - finish datalog function
+// - include call to function somewhere in loop
+
 // Initially set power limit to 100W
 // Header Files
 #include "LiquidCrystal_I2C.h"
@@ -26,10 +30,12 @@ File dataFile;
 
 // Global variables
 // Defining Pins
-#define rotary_encoder_clk 2
-#define rotary_encoder_dt 3
-#define rotary_encoder_sw 4
-#define buzzer_pin 7
+#define ROTARY_ENCODER_CLK 2
+#define ROTARY_ENCODER_DT 3
+#define ROTARY_ENCODER_SW 4
+#define BUZZER_PIN 7
+#define CHIP_SELECT_PIN 10
+#define CARD_DETECT_PIN 8
 
 volatile bool clockwise;
 volatile bool turnDetected;
@@ -77,6 +83,7 @@ bool dataLogging;
 bool powerMode;
 unsigned long referenceTime = millis();
 unsigned long timeOffset;
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 // Creating LCD object
 LiquidCrystal_I2C lcd(lcdAddress, 128, 64);
@@ -84,13 +91,13 @@ LiquidCrystal_I2C lcd(lcdAddress, 128, 64);
 // Buzzer function
 void buzzer()
 {
-  pinMode(buzzer_pin, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
 
   while (!buttonPressed)
   {
-    digitalWrite(buzzer_pin, HIGH);
+    digitalWrite(BUZZER_PIN, HIGH);
     delay(2);
-    digitalWrite(buzzer_pin, LOW);
+    digitalWrite(BUZZER_PIN, LOW);
     delay(2);
   }
 }
@@ -691,11 +698,11 @@ void writeDataToSD()
 // Function to initialise SD Card 
 void initialiseSD()
 {  
-  // See if the card is present and can be initialized:
-  if (!SD.begin(SD_CHIP_SELECT_PIN)) 
+  // Initialise SD card:
+  if (!SD.begin(CHIP_SELECT_PIN)) 
   {
     // Print to console
-    Serial.println("Card failed, or not present");
+    Serial.println("SD Card inialisation failed/not present.");
 
     // NO/INVALID SD CARD screen
     screen13();
@@ -709,8 +716,8 @@ void initialiseSD()
     now = rtc.now();
 
     // Format filename for SD card
-    char filename[20];
-    sprintf(filename, "Time_%d-%d__Date_%d-%d-%d", int(now.hour()), int(now.minute()), int(now.day()), int(now.month()), int(now.year()));
+    char filename[14];
+    sprintf(filename, "EL_%d_%d.txt", int(now.hour()), int(now.minute())); 
     Serial.println(filename);
   
     // Open file to write to
@@ -725,6 +732,56 @@ void initialiseSD()
     else
     {
       dataLogging = true;
+
+      // Print date and time in text file
+      dataFile.print("Created: ");
+      dataFile.print(daysOfTheWeek[now.dayOfTheWeek()]);
+      dataFile.print(" ");
+
+      // Print day
+      if (now.day() < 10) // Padding
+      {
+        dataFile.print("0");
+      }
+      dataFile.print(now.day());
+      dataFile.print("/");
+
+      // Print month
+      if (now.month() < 10) // Padding
+      {
+        dataFile.print("0");
+      }
+      dataFile.print(now.month());
+      dataFile.print("/");
+
+      // Print year
+      dataFile.print(now.year());
+      dataFile.print(" ");
+
+      // Print hour
+      if (now.hour() < 10) // Padding
+      {
+        dataFile.print("0");
+      }
+      dataFile.print(now.hour());
+      dataFile.print(":");
+
+      // Print minute
+      if (now.minute() < 10) // Padding
+      {
+        dataFile.print("0");
+      }
+      dataFile.print(now.minute());
+      dataFile.print(":");
+
+      // Print second
+      if (now.second() < 10) // Padding
+      {
+        dataFile.print("0");
+      }
+      dataFile.println(now.second());
+      dataFile.println("");
+
 
       // Print data headings
       dataFile.println("Time (s), System Voltage (V), Voltage1 (V), Voltage2 (V), Voltage3 (V), Mode, Mode Target, Mode Value, " 
@@ -743,27 +800,17 @@ void isr0()
   turnDetected = true;
 
   // Check direction
-  clockwise = digitalRead(rotary_encoder_clk) != digitalRead(rotary_encoder_dt);
+  clockwise = digitalRead(ROTARY_ENCODER_CLK) != digitalRead(ROTARY_ENCODER_DT);
 }
 
 // ISR for when the button on the rotary encoder is pressed
-// PCINT2_vect
-//#define PORTC_PORT_vect 0x30
-// ISR(PORTC_PORT_vect)
-// {
-//   if (digitalRead(rotary_encoder_sw) == LOW)
-//   {
-//     buttonPressed = true;
-//   }
-// }
 void isr1()
 {
-  if (digitalRead(rotary_encoder_sw) == LOW)
+  if (digitalRead(ROTARY_ENCODER_SW) == LOW)
   {
     buttonPressed = true;
   }
 }
-
 
 void setup()
 {
@@ -801,26 +848,19 @@ void setup()
   lcd.backlight();
 
   // Initialising pins for rotary encoder
-  pinMode(rotary_encoder_clk, INPUT_PULLUP);
-  pinMode(rotary_encoder_dt, INPUT_PULLUP);
-  pinMode(rotary_encoder_sw, INPUT_PULLUP);
+  pinMode(ROTARY_ENCODER_CLK, INPUT_PULLUP);
+  pinMode(ROTARY_ENCODER_DT, INPUT_PULLUP);
+  pinMode(ROTARY_ENCODER_SW, INPUT_PULLUP);
 
   // Initialising pins for SD card
   pinMode(SD_CHIP_SELECT_PIN, OUTPUT);
 
-  // Setting up ISR for rotary encoder button
-  // PCICR |= 0b00000100;
-  // PCMSK2 |= 0b00010000; // turn on PCINT20(D4)
-  // PORTC.PIN6CTRL |= 0b00000010;
-  // #define WRITE_PIN6CTRL(val) ((*(volatile uint32_t *)0x16) = (val));
-  // WRITE_PIN6CTRL(0b00000010); // set pin 6 as interrupt on rising edge
-
   // Setting up serial monitor
   Serial.begin(9600);
 
-  // Setting up ISR for turning event
-  attachInterrupt(digitalPinToInterrupt(rotary_encoder_dt), isr0, RISING);
-  attachInterrupt(digitalPinToInterrupt(rotary_encoder_sw), isr1, CHANGE);
+  // Setting up ISR for turning event and button pressed event
+  attachInterrupt(digitalPinToInterrupt(ROTARY_ENCODER_DT), isr0, RISING);
+  attachInterrupt(digitalPinToInterrupt(ROTARY_ENCODER_SW), isr1, CHANGE);
 
   // Beginning the LCD start sequence
   screen0(now.minute(), now.hour(), now.day(), now.month(), now.year());
