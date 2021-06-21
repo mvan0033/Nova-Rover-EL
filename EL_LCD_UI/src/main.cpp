@@ -79,7 +79,7 @@ int lcdAddress = 0x27;
 int screen = 1;
 int cursorPosition;
 int selectedDigit;
-bool dataLogging;
+bool dataLogging = false;
 bool powerMode;
 unsigned long referenceTime = millis();
 unsigned long timeOffset;
@@ -453,6 +453,9 @@ void screen13()
   lcd.setCursor(2, 0);
   lcd.write(byte(62));
   lcd.print("Back");
+
+  // Set datalogging to false
+  dataLogging = false;
 }
 
 // Overtemperature error
@@ -464,6 +467,9 @@ void screen14()
   lcd.print("OVERTEMPERATURE");
   lcd.setCursor(2, 2);
   lcd.print("ERROR");
+
+  // Stop datalogging
+  dataLogging = false;
 
   // Play sound to indicate overtemperature error
   buzzer();
@@ -480,6 +486,9 @@ void screen15()
   lcd.print("CUT-OFF");
   lcd.setCursor(2, 0);
   lcd.print("TERMINATION");
+
+  // Stop datalogging
+  dataLogging = false;
 
   // Play sound to indicate low-voltage error
   buzzer();
@@ -504,6 +513,9 @@ void screen16()
     dataFile.close();
   }
 
+  // Stop datalogging
+  dataLogging = false;
+
   // Play sound to indicate analysis complete
   buzzer();
 }
@@ -523,6 +535,9 @@ void screen17()
   {
     dataFile.close();
   }
+
+  // Stop datalogging
+  dataLogging = false;
 
   // Play sound to indicate early termination
   buzzer();
@@ -690,9 +705,25 @@ void writeDataToSD()
 {
   // TODO: Print data to SD card
   dataFile.print(elapsedTime);
-  dataFile.print(", ");
-  dataFile.print(controller.get_total_voltage());
-  dataFile.print(", ");
+  dataFile.print(",");
+  dataFile.print(current);
+  dataFile.print(",");
+  dataFile.print(curCurrent);
+  dataFile.print(",");
+  dataFile.print(power);
+  dataFile.print(",");
+  dataFile.print(curPower);
+  dataFile.print(",");
+  dataFile.print(hotTemp);
+  dataFile.print(",");
+  if (powerMode)
+  {
+    dataFile.println("Power Mode");
+  }
+  else
+  {
+    dataFile.println("Current Mode");
+  }
 }
 
 // Function to initialise SD Card 
@@ -726,11 +757,15 @@ void initialiseSD()
     // Check for errors opening file
     if (!dataFile) 
     {
+      // Print error to console
       Serial.println("error opening datalog.txt");
+
+      // NO/INVALID SD CARD screen
       screen13();
     }
     else
     {
+      // Set datalogging to true
       dataLogging = true;
 
       // Print date and time in text file
@@ -784,11 +819,12 @@ void initialiseSD()
 
 
       // Print data headings
-      dataFile.println("Time (s), System Voltage (V), Voltage1 (V), Voltage2 (V), Voltage3 (V), Mode, Mode Target, Mode Value, " 
-      "Temperature1 (C), Temperature2 (C), Temperature3 (C), Temperature4 (C), Current1 (A), Current2 (A), Current3 (A), Current4 (A), PWM1, PWM2, "
-      "PWM3, PWM4");
+      // dataFile.println("Time (s), System Voltage (V), Voltage1 (V), Voltage2 (V), Voltage3 (V), Mode, Mode Target, Mode Value, " 
+      // "Temperature1 (C), Temperature2 (C), Temperature3 (C), Temperature4 (C), Current1 (A), Current2 (A), Current3 (A), Current4 (A), PWM1, PWM2, "
+      // "PWM3, PWM4");
+      dataFile.println("Time (s),Set Current (A),Current (A),Set Power (W),Power (W),Hot temperature (C),Mode");
 
-      // Move to next screen
+      // Move to low voltage screen
       screen7();
     }
   }
@@ -935,6 +971,12 @@ void loop()
 
       // Overtemperature error screen
       screen14();
+    }
+
+    // Datalog raw values
+    if (dataLogging && (screen == 11 || screen == 12 || screen == 18))
+    {
+      writeDataToSD();
     }
 
     // Update reference time
@@ -1304,6 +1346,7 @@ void loop()
       }
       case 1: // No
       {
+        dataLogging = false;
         screen7();
         break;
       }
