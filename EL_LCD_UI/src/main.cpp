@@ -42,19 +42,14 @@ volatile bool turnDetected;
 volatile bool buttonPressed;
 
 // Variables for displaying power value
-int powerDigit1 = 1; // Tens digit
-int powerDigit2;     // Units digit
-// int powerDigit3 = 0; // Tenths digit
-// int powerDigit4 = 0; // Hundredth digit
-// int powerDecimalPlace = 0;
+int powerDigit1;    // Hundreds digit
+int powerDigit2 = 1; // Tens digit
+int powerDigit3;     // Units digit
 int power;
 
 // Variables for displaying current values
 int currentDigit1 = 1; // Tens digit
 int currentDigit2;     // Units digit
-// int currentDigit3 = 0; // Tenths digit
-// int currentDigit4 = 0; // Hundredth digit
-// int currentDecimalPlace = 0;
 int current;
 
 // Variables for displaying low voltage values
@@ -114,6 +109,12 @@ void screen0(uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, int16_t y
   lcd.setCursor(2, 0);
   lcd.print("ELECTRONIC LOAD");
   lcd.setCursor(3, 0);
+
+  // Padding the hours if necessary 
+  if (hour < 10)
+  {
+    lcd.print("0");
+  }
   lcd.print(hour);
   lcd.print(":");
 
@@ -123,12 +124,24 @@ void screen0(uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, int16_t y
     lcd.print("0");
   }
   lcd.print(minute);
-  
   lcd.print(" ");
+
+  // Padding the day if necessary
+  if (day < 10)
+  {
+    lcd.print("0");
+  }
   lcd.print(day);
   lcd.print("/");
+
+  // Padding the month if necessary
+  if (month < 10)
+  {
+    lcd.print("0");
+  }
   lcd.print(month);
   lcd.print("/");
+  
   lcd.print(year);
 }
 
@@ -152,7 +165,7 @@ void screen2()
   screen = 2;
 
   // Calculate current value
-  current = currentDigit1 * pow(10, 1) + currentDigit2;
+  current = currentDigit1*pow(10, 1) + currentDigit2;
 
   // Set up screen
   lcd.clear();
@@ -175,7 +188,7 @@ void screen3()
   screen = 3;
 
   // Calculate power value
-  power = powerDigit1 * pow(10, 1) + powerDigit2;
+  power = powerDigit1*pow(10, 2) + powerDigit2*pow(10, 1) + powerDigit3;
 
   // Set up screen
   lcd.clear();
@@ -198,7 +211,7 @@ void screen4()
   screen = 4;
 
   // Calculate current value
-  current = currentDigit1 * pow(10, 1) + currentDigit2;
+  current = currentDigit1*pow(10, 1) + currentDigit2;
 
   // Set up screen
   lcd.clear();
@@ -209,12 +222,8 @@ void screen4()
   if (current < 10)
   {
     lcd.print("0");
-    lcd.print(current);
   }
-  else
-  {
-    lcd.print(current);
-  }
+  lcd.print(current);
 
   lcd.print("A");
 }
@@ -225,7 +234,7 @@ void screen5()
   screen = 5;
 
   // Calculate power value
-  power = powerDigit1 * pow(10, 1) + powerDigit2;
+  power = powerDigit1*pow(10, 2) + powerDigit2*pow(10, 1) + powerDigit3;
 
   // Set up screen
   lcd.clear();
@@ -235,13 +244,13 @@ void screen5()
   // Padding if necessary
   if (power < 10)
   {
-    lcd.print("0");
-    lcd.print(power);
+    lcd.print("00");
   }
-  else
+  else if (power < 100)
   {
-    lcd.print(power);
+    lcd.print("0");
   }
+  lcd.print(power);
 
   lcd.print("W");
 }
@@ -305,17 +314,12 @@ void screen8()
   if (timeLimit < 10)
   {
     lcd.print("00");
-    lcd.print(timeLimit, 0);
   }
   else if (timeLimit < 100)
   {
     lcd.print("0");
-    lcd.print(timeLimit, 0);
   }
-  else
-  {
-    lcd.print(timeLimit, 0);
-  }
+  lcd.print(timeLimit, 0);
 
   lcd.print("mins");
 }
@@ -1050,6 +1054,12 @@ void loop()
         screen5();
         break;
       }
+      case 3: 
+      {
+        changeDigit(&powerDigit3);
+        screen5();
+        break;
+      }
       default:
       {
         Serial.print("2. This is an error\n");
@@ -1198,7 +1208,6 @@ void loop()
   {
     // Reset buttonPressed
     buttonPressed = false;
-    // delay(200);
 
     switch (screen)
     {
@@ -1300,32 +1309,25 @@ void loop()
 
       switch (selectedDigit)
       {
-      case 1: // Tens digit
+      case 1: // Hundreds digit
       {
         char buffer[2];
         itoa(powerDigit2, buffer, 10);
         flashDigit(powerDigit1, 1, 4, buffer, false);
         break;
       }
-      case 2: // Units digit
+      case 2: // Tens digit
       {
         char buffer[2];
         itoa(powerDigit1, buffer, 10);
         flashDigit(powerDigit2, 1, 4, buffer, true);
         break;
       }
-      // case 3: // Tenths digit
-      // {
-      //   flashDigit(currentDigit3, 1, 5, "", true);
-      //   break;
-      // }
-      // case 4: // Hundredth digit
-      // {
-      //   char buffer[2];
-      //   itoa(currentDigit3, buffer, 10);
-      //   flashDigit(currentDigit4, 1, 6, "W", false);
-      //   break;
-      // }
+      case 3: // Units digit
+      {
+        flashDigit(powerDigit3, 1, 5, "W", false);
+        break;
+      }
       default: // Continue to next screen and reset selectedDigit
       {
         screen3();
