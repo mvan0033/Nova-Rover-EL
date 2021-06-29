@@ -1,14 +1,9 @@
 /* Program to implement the logic and user interface for an Ardunio Nano on the Monash Nova Rover Electronic Load.
 
 Written by Matt van Wijk
-Last modified: 19/06/2021
+Last modified: 29/06/2021
 */
 
-// TODO: Log data to SD card
-// - finish datalog function
-// - include call to function somewhere in loop
-
-// Initially set power limit to 100W
 // Header Files
 #include "LiquidCrystal_I2C.h"
 #include <Wire.h>
@@ -279,7 +274,7 @@ void screen7()
   screen = 7;
 
   // Calculate time limit value
-  timeLimit = timeLimitDigit1 * pow(10, 2) + timeLimitDigit2 * pow(10, 1) + timeLimitDigit3;
+  timeLimit = timeLimitDigit1*pow(10, 2) + timeLimitDigit2*pow(10, 1) + timeLimitDigit3;
 
   // Set up screen
   lcd.clear();
@@ -302,7 +297,7 @@ void screen8()
   screen = 8;
 
   // Calculate time limit value
-  timeLimit = timeLimitDigit1 * pow(10, 2) + timeLimitDigit2 * pow(10, 1) + timeLimitDigit3;
+  timeLimit = timeLimitDigit1*pow(10, 2) + timeLimitDigit2*pow(10, 1) + timeLimitDigit3;
 
   // Set up screen
   lcd.clear();
@@ -330,7 +325,7 @@ void screen9()
   screen = 9;
 
   // Calculate low voltage value
-  lowVoltage = lowVoltageDigit1 * pow(10, 1) + lowVoltageDigit2 + lowVoltageDigit3 * pow(10, -1);
+  lowVoltage = lowVoltageDigit1*pow(10, 1) + lowVoltageDigit2 + lowVoltageDigit3*pow(10, -1);
 
   // Set up screen
   lcd.clear();
@@ -355,7 +350,7 @@ void screen10()
   screen = 10;
 
   // Calculate low voltage value
-  lowVoltage = lowVoltageDigit1 * pow(10, 1) + lowVoltageDigit2 + lowVoltageDigit3 * pow(10, -1);
+  lowVoltage = lowVoltageDigit1*pow(10, 1) + lowVoltageDigit2 + lowVoltageDigit3*pow(10, -1);
 
   // Set up screen
   lcd.clear();
@@ -563,11 +558,6 @@ void screen18()
   lcd.setCursor(2, 0);
   lcd.write(byte(62)); // Print an arrow character
   cursorPosition = 0;
-}
-
-// Function to display set the current/power and display on the LCD
-void setPowerCurrent(int powerCurrent)
-{
 }
 
 /* Function for moving the cursor position 
