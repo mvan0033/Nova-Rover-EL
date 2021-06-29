@@ -22,7 +22,7 @@
 #define NUM_TLC59711 1
 #define data 6
 #define clock 5
-#define PWM_MAX 65535
+#define PWM_MAX 65535 // Maximum PWM value we can send (16 bit)
 
 #if NO_HARDWARE_MODE == 0
 // PWM MODULE OBJECT.
@@ -43,11 +43,12 @@ MCP342x adc_current = MCP342x(adc_current_addr);
 MCP342x adc_voltage = MCP342x(adc_voltage_addr);
 #endif
 
-int8_t load_voltage_channel = 3; // What channel of the adc_voltage chip, do we find out 0 to 75V LOAD voltage.
 
 class ControlLoop
 {
     public:
+    
+    int8_t load_voltage_channel = 3; // What channel of the adc_voltage chip, do we find our 0 to 75V LOAD voltage.
 
     void init()
     {
@@ -162,10 +163,9 @@ class ControlLoop
             // print_all_readings();
 
             // Update the target error
-            update_target_error();
-
+            calculate_target_error_values();
             // Update the PWM output per-channelm, based on this error.
-            update_pwm_output_values();
+            calculate_pwm_output_values();
             apply_pwm_output_values();
 
         }else{
@@ -182,6 +182,13 @@ class ControlLoop
         }
     }
 
+    void reset_errors()
+    {
+        reset_pwm_arrays_to_zero();
+        /* Resets an error state */
+        controlLoopError = false;
+    }
+    
     void set_enable(bool state)
     {
         /* Enable / Disable the control loop */
@@ -196,13 +203,6 @@ class ControlLoop
         }
     }
 
-    void reset_errors()
-    {
-        reset_pwm_arrays_to_zero();
-        /* Resets an error state */
-        controlLoopError = false;
-    }
-
     void set_target_mode(int mode)
     {
         /* 
@@ -210,7 +210,11 @@ class ControlLoop
                 0 = Current Target
                 1 = Power Target 
             */
-        targetMode = mode;
+        if(mode == 0 || mode == 1){
+            targetMode = mode;
+        }else{
+            Serial.println("Invalid targetMode!")
+        }
     }
 
     void set_target_value(int value)
@@ -303,24 +307,24 @@ class ControlLoop
     double get_total_current()
     {
         // Return combined current throughput
-        double latestReadings[4] = {0,0,0,0};
+        double _temp[4] = {0,0,0,0};
         for(int i = 0; i<4; i++)
         {
-            latestReadings[i] = readings_current[i];
+            _temp[i] = readings_current[i];
         }
-        return latestReadings[0] + latestReadings[1] + latestReadings[2] + latestReadings[3];
+        return _temp[0] + _temp[1] + _temp[2] + _temp[3];
     }
 
     double get_total_power()
     {
         // Return combined power throughput
-        double latestReadings[4] = {0,0,0,0};
+        double _temp[4] = {0,0,0,0};
         for(int i = 0; i<4; i++)
         {
-            latestReadings[i] = readings_current[i] * readings_voltage[load_voltage_channel];
+            _temp[i] = readings_current[i] * readings_voltage[load_voltage_channel];
         }
 
-        return latestReadings[0] + latestReadings[1] + latestReadings[2] + latestReadings[3];
+        return _temp[0] + _temp[1] + _temp[2] + _temp[3];
     }
 
     double get_total_voltage()
@@ -344,6 +348,7 @@ class ControlLoop
         return temp;
     }
 
+    
     bool get_pwm_active_state()
     {
         // Returns a boolean that signifies if PWM outputs are enabled or not.
@@ -359,6 +364,18 @@ class ControlLoop
 
 private:
     /* HOW MANY MOSFET BOARDS DO WE HAVE */
+    // We will split the current across these modules,
+    // and according to the target values.
+    // Note that the system hardware will always assume a 4-module installation,
+    // so the unused 'modules' will have their PWM set to zero.
+
+    /*
+    Modules Diagram
+        M4  |   M3
+        ----------
+        M1  |   M2
+    */
+
     int8_t mosfetModuleCount = 4;
 
     /* Control loop targets */
@@ -379,6 +396,8 @@ private:
     int16_t temperatureLimit = 600;  // DEGREES C
 
     /* Latest ADC readings per channel */
+    // These are updated only when the MCP3424 chip has a fresh set of readings for us.
+    // This is so our update() loop can execute as fast as possible!
     double readings_temperature[4] = {0,0,0,0};
     double readings_current[4] = {0,0,0,0};
     double readings_voltage[4] = {0,0,0,0};
@@ -386,9 +405,8 @@ private:
     /* PMW Output variables */
     uint16_t outputs_pwm[4] = {0,0,0,0};
     
-    double pwm_proportional_coeff = 1000; // Multiply error from targetValue to get this.
-    double pwm_rate_limit = 1000; // 1000 per update rate.
-    double pwm_rate_limit_slow = 5; // Pwm change when very close to target 
+    /* PWM feedback loop parameters */
+    double pwm_proportional_coeff = 1; // How fast do we increment in the direction of our goal
 
     /* Apply per-channel PWM */
     void apply_pwm_output_values()
@@ -398,49 +416,23 @@ private:
             pwm_set_duty(&pwm_module,1,outputs_pwm[1]);
             pwm_set_duty(&pwm_module,2,outputs_pwm[2]);
             pwm_set_duty(&pwm_module,3,outputs_pwm[3]);
-        // #else
-            // Serial.println("APPLYING PWM OUTPUTS");
-            // Serial.print("CH0: ");
-            // Serial.println(outputs_pwm[0]);
-            // Serial.print("CH1: ");
-            // Serial.println(outputs_pwm[1]);
-            // Serial.print("CH2: ");
-            // Serial.println(outputs_pwm[2]);
-            // Serial.print("CH3: ");
-            // Serial.println(outputs_pwm[3]);
         #endif
     }
 
     /* From per-channel errors, update the PWM outputs */
-    void update_pwm_output_values()
+    void calculate_pwm_output_values()
     {
         for(int i = 0; i<4; i++)
         {
             double pwmError = targetErrors[i] * pwm_proportional_coeff;
-
-            // Adjust ramp speed depending on region of base voltage.
-            if(outputs_pwm[i] > 52428-pwm_rate_limit)
+            
+            if(pwmError > 1)
             {
-                Serial.print("SLOW,");
-                if(pwmError > pwm_rate_limit_slow)
-                {
-                    pwmError = pwm_rate_limit_slow;
-                }
-                if(pwmError < -pwm_rate_limit_slow)
-                {
-                    pwmError = -pwm_rate_limit_slow;
-                }
-            }else{
-                Serial.print("FAST,");
-                // Clamp to pwm_proportional coeff
-                if(pwmError > pwm_rate_limit)
-                {
-                    pwmError = pwm_rate_limit;
-                }
-                if(pwmError < -pwm_rate_limit)
-                {
-                    pwmError = -pwm_rate_limit;
-                }
+                pwmError = 1;
+            }
+            if(pwmError < -1)
+            {
+                pwmError = -1;
             }
             
             // Store value before increment
@@ -475,14 +467,10 @@ private:
         }
 
         Serial.println("");
-
-        // Print the output efforts
-        // Serial.print("PWM Outputs: ");
-        // print_output_array(outputs_pwm);
     }
 
     /* Update the targetErrors per channel */
-    void update_target_error()
+    void calculate_target_error_values()
     {
         // Depending on mode we calculate target error.
         double latestReadings[4] = {0,0,0,0};
@@ -682,12 +670,12 @@ private:
             // (see DATA/MOSFET_MODULE_10VDS_Variable_VGS)
             // I plotted some points of V_GS vs I_DS, and fit a curve to that.
             // Then used the curve equation here to make it 'semi-realistic'
-            // Also added noise! (+/- 0.2A)    
+            // Also added noise! (+/- 2mV on the output_pwm line)    
         
-            double baseVoltage1 = (double)5*(double)outputs_pwm[0]/(double)65535;
-            double baseVoltage2 = (double)5*(double)outputs_pwm[1]/(double)65535;
-            double baseVoltage3 = (double)5*(double)outputs_pwm[2]/(double)65535;
-            double baseVoltage4 = (double)5*(double)outputs_pwm[3]/(double)65535;
+            double baseVoltage1 = ((double)5*(double)outputs_pwm[0]+((double)(random(0,40)-20)/1000))/(double)65535;
+            double baseVoltage2 = ((double)5*(double)outputs_pwm[1]+((double)(random(0,40)-20)/1000))/(double)65535;
+            double baseVoltage3 = ((double)5*(double)outputs_pwm[2]+((double)(random(0,40)-20)/1000))/(double)65535;
+            double baseVoltage4 = ((double)5*(double)outputs_pwm[3]+((double)(random(0,40)-20)/1000))/(double)65535;
 
             Serial.println("BASE VOLTAGES");
             Serial.print(baseVoltage1,6);
@@ -698,10 +686,10 @@ private:
             Serial.print(",");
             Serial.println(baseVoltage4,6);
 
-            readings_current[0] = fake_mosfet_model(baseVoltage1) + (double)(random(0,40)-20)/100;
-            readings_current[1] = fake_mosfet_model(baseVoltage2) + (double)(random(0,40)-20)/100;
-            readings_current[2] = fake_mosfet_model(baseVoltage3) + (double)(random(0,40)-20)/100;
-            readings_current[3] = fake_mosfet_model(baseVoltage4) + (double)(random(0,40)-20)/100;
+            readings_current[0] = fake_mosfet_model(baseVoltage1);
+            readings_current[1] = fake_mosfet_model(baseVoltage2);
+            readings_current[2] = fake_mosfet_model(baseVoltage3);
+            readings_current[3] = fake_mosfet_model(baseVoltage4);
             
             // At 14-bit precision, we can expect ~66 ms delay for a 4-IC reading.
             // See MCP3424 for samples-per-second figures, to determine this.

@@ -2,12 +2,29 @@
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+from random import uniform
 
-eq1_current = lambda x: (2.5923060142355E-15) * math.exp(8.1407449923113 * x)
-eq2_current = lambda x: 734.04065811719 * math.pow(x,2) - 5824.45578150388 * x + 11554.22728209
-fake_mos = lambda x: eq1_current(x) if x < 3.96739 else eq2_current(x)
+eq1_current = lambda x: (0.4629629629629629 * x) - 1.574074074074074
+eq2_current = lambda x: (12.49999999999999 * x) - 48.99999999999996
+eq3_current = lambda x: (749.0 * x) - 2995.0
 
-v_gs = np.linspace(4.0,5.0,math.floor(65535 * (0.1/5)))
-fake_mos_data = [fake_mos(x) for x in v_gs]
-plt.plot(v_gs,fake_mos_data)
+def fake_mos(x):
+    if(x <= 3.4):
+        return 0
+    elif(x <= 3.94):
+        return eq1_current(x)
+    elif(x <= 4.0):
+        return eq2_current(x)
+    else:
+        return eq3_current(x)
+
+v_gs = np.linspace(0.0,5.0,10000)
+v_gs_q = np.linspace(0.0,5.0,100)
+
+noiseV = 2/1000
+noiseV = noiseV/2
+
+plt.plot(v_gs,[fake_mos(x) for x in v_gs])
+# plt.plot(v_gs,[fake_mos(x) for x in v_gs])
+plt.errorbar(v_gs_q,[fake_mos(x) for x in v_gs_q],noiseV)
 plt.show()
