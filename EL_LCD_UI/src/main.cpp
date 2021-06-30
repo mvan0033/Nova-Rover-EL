@@ -35,6 +35,7 @@ File dataFile;
 volatile bool clockwise;
 volatile bool turnDetected;
 volatile bool buttonPressed;
+volatile unsigned long debounceTimer;
 
 // Variables for displaying power value
 int powerDigit1;    // Hundreds digit
@@ -462,10 +463,65 @@ void screen14()
 {
   screen = 14;
   lcd.clear();
-  lcd.setCursor(1, 0);
+  lcd.setCursor(1, 2);
   lcd.print("OVERTEMPERATURE");
   lcd.setCursor(2, 2);
-  lcd.print("ERROR");
+  lcd.print("ERROR (");
+  lcd.print(controller.get_global_limit_temperature());
+  lcd.print("C)");
+
+  // Stop datalogging
+  dataLogging = false;
+
+  // Play sound to indicate overtemperature error
+  buzzer();
+}
+
+// Overcurrent error
+void screen19()
+{
+  screen = 19;
+  lcd.clear();
+  lcd.setCursor(0, 2);
+  lcd.print("OVER CURRENT");
+  lcd.setCursor(1, 2);
+  lcd.print("ERROR ON");
+  
+  uint8_t moduleError = controller.get_error_module();
+  lcd.setCursor(2, 2);
+  lcd.print("MODULE ");
+  lcd.print(moduleError);
+
+  lcd.setCursor(3,2);
+  lcd.print(controller.get_global_limit_current());
+  lcd.print("A");
+  
+
+  // Stop datalogging
+  dataLogging = false;
+
+  // Play sound to indicate overtemperature error
+  buzzer();
+}
+
+// Overpower error
+void screen20()
+{
+  screen = 20;
+  lcd.clear();
+  lcd.setCursor(0, 2);
+  lcd.print("OVER POWER");
+  lcd.setCursor(1, 2);
+  lcd.print("ERROR ON");
+  
+  uint8_t moduleError = controller.get_error_module();
+  lcd.setCursor(2, 2);
+  lcd.print("MODULE ");
+  lcd.print(moduleError);
+
+  lcd.setCursor(3,2);
+  lcd.print(controller.get_global_limit_power());
+  lcd.print("W");
 
   // Stop datalogging
   dataLogging = false;
@@ -827,7 +883,11 @@ void initialiseSD()
 // ISR for when a turn is detected from the rotary encoder
 void isr0()
 {
-  turnDetected = true;
+  if(millis() - debounceTimer > 250)
+  {
+    turnDetected = true;
+    debounceTimer = millis();
+  }
 
   // Check direction
   clockwise = digitalRead(ROTARY_ENCODER_CLK) != digitalRead(ROTARY_ENCODER_DT);
@@ -838,7 +898,11 @@ void isr1()
 {
   if (digitalRead(ROTARY_ENCODER_SW) == LOW)
   {
-    buttonPressed = true;
+    if(millis() - debounceTimer > 250)
+    {
+      buttonPressed = true;
+      debounceTimer = millis();
+    }
   }
 }
 
@@ -906,19 +970,6 @@ void loop()
   // Update control loop!
   controller.update();
 
-  // Check error state (true means error)
-  if (controller.get_error_state())
-  {
-    Serial.print("Error on MODULE #");
-    Serial.println(controller.get_error_module());
-    Serial.print("Error type was #");
-    Serial.println(controller.get_error_type());
-
-    // Serial.println("Resetting...");
-    // delay(5000);
-    // controller.reset_errors();
-  }
-
   // Update global variables every 1 seconds
   if (millis() - referenceTime > 1000)
   {
@@ -930,13 +981,45 @@ void loop()
     
     if (screen == 11)
     {
+      // Current monitor screen
       screen11();
     }
     else if (screen == 12)
     {
+      // Power monitor screen
       screen12();
     }
 
+    // Check for error state in the control_loop
+    // Check error state (true means error)
+    if (controller.get_error_state())
+    {
+      // Serial.print("Error on MODULE #");
+      // Serial.println(controller.get_error_module());
+      // Serial.print("Error type was #");/
+      // Serial.println(controller.get_error_type());
+      
+      // Terminate analysis (already done)
+      controller.set_enable(false);
+
+      // Go to screen dependant on type of error
+      if(controller.get_error_type() == 0)
+      {
+        // Current
+        screen19();
+      }else if(controller.get_error_type() == 1)
+      {
+        // Power
+        screen20();
+      }else{
+        // Temperature
+        screen14();
+      }
+
+      // Clear the error now that we have handled it?
+      controller.reset_errors();
+    }
+    
     // Check elapsed time against time limit
     if (elapsedTime / 60.0 >= timeLimit && controller.get_pwm_active_state())
     {
@@ -957,15 +1040,15 @@ void loop()
       screen15();
     }
 
-    // Check temperature against max temperature limit
-    else if (controller.get_highest_temperature() > MAX_TEMPERATURE && controller.get_pwm_active_state())
-    {
-      // Terminate Analaysis
-      controller.set_enable(false);
+    // // Check temperature against max temperature limit
+    // else if (controller.get_highest_temperature() > MAX_TEMPERATURE && controller.get_pwm_active_state())
+    // {
+    //   // Terminate Analaysis
+    //   controller.set_enable(false);
 
-      // Overtemperature error screen
-      screen14();
-    }
+    //   // Overtemperature error screen
+    //   screen14();
+    // }
 
     // Datalog raw values
     if (dataLogging && (screen == 11 || screen == 12 || screen == 18))

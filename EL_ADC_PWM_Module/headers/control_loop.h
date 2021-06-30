@@ -224,7 +224,7 @@ class ControlLoop
             Respects Amp or Power limits based on targetMode.
             This is the value we are attempting to maintain with our control loop.
             */
-        int tempValue = value;
+        uint16_t tempValue = abs(value);
 
         switch (targetMode)
         {
@@ -362,6 +362,36 @@ class ControlLoop
         return true;
     }
 
+    uint16_t get_global_limit_current()
+    {
+        return currentLimit;
+    }
+
+    uint16_t get_global_limit_power()
+    {
+        return powerLimit;
+    }
+
+    uint16_t get_global_limit_temperature()
+    {
+        return temperatureLimit;
+    }
+
+    uint16_t set_global_limit_current(uint16_t val)
+    {
+        currentLimit = val;
+    }
+
+    uint16_t set_global_limit_power(uint16_t val)
+    {
+        powerLimit = val;
+    }
+
+    uint16_t set_global_limit_temperature(uint16_t val)
+    {
+        temperatureLimit = val;
+    }
+
 private:
     /* HOW MANY MOSFET BOARDS DO WE HAVE */
     // We will split the current across these modules,
@@ -384,16 +414,16 @@ private:
     int8_t errorType = 0; // What kind of error? 0 for current, 1 for power, 2 for temperature
     int8_t errorMOSFET = 0; // What mosfet module experienced this error.
 
-    int8_t targetMode = 0;              // 0 for current target. 1 for power target.
-    int8_t targetValue = 0;             // Target value (could be Amps or Watts)
+    uint16_t targetMode = 0;              // 0 for current target. 1 for power target.
+    uint16_t targetValue = 0;             // Target value (could be Amps or Watts)
     
     /* Feedback variable */
     double targetErrors[4] = {0,0,0,0}; // Calculated error from our targetValue, identified PER-CHANNEL.
 
     /* GLOBAL SAFETY LIMITS */
-    int16_t currentLimit = 100; // AMPS
-    int16_t powerLimit = 1000;  // WATTS
-    int16_t temperatureLimit = 600;  // DEGREES C
+    uint16_t currentLimit = 100; // AMPS
+    uint16_t powerLimit = 1000;  // WATTS
+    uint16_t temperatureLimit = 600;  // DEGREES C
 
     /* Latest ADC readings per channel */
     // These are updated only when the MCP3424 chip has a fresh set of readings for us.
@@ -407,6 +437,7 @@ private:
     
     /* PWM feedback loop parameters */
     double pwm_proportional_coeff = 1; // How fast do we increment in the direction of our goal
+    double pwm_rampup_threshold = 49000; // Jump here at first
 
     /* Apply per-channel PWM */
     void apply_pwm_output_values()
@@ -424,20 +455,28 @@ private:
     {
         for(int i = 0; i<4; i++)
         {
-            double pwmError = targetErrors[i] * pwm_proportional_coeff;
-            
-            if(pwmError > 1)
+            double pwmError = 0;
+
+            if(outputs_pwm[i] < pwm_rampup_threshold)
             {
-                pwmError = 1;
-            }
-            if(pwmError < -1)
-            {
-                pwmError = -1;
+                pwmError = (pwm_rampup_threshold) - outputs_pwm[i];
+            }else{
+                pwmError = targetErrors[i] * pwm_proportional_coeff;
+
+                if(pwmError > 10)
+                {
+                    pwmError = 10;
+                }
+                if(pwmError < -10)
+                {
+                    pwmError = -10;
+                }
             }
             
             // Store value before increment
             uint16_t preUpdateValue = (uint16_t)outputs_pwm[i];
-            int16_t pwmIncrement = (int16_t)floor(pwmError);
+            int32_t pwmIncrement = (int32_t)floor(pwmError);
+
             // Perform increment
             outputs_pwm[i] += pwmIncrement;
 
@@ -474,7 +513,14 @@ private:
     {
         // Depending on mode we calculate target error.
         double latestReadings[4] = {0,0,0,0};
+        // Serial.print("Target Value: ");
+        // Serial.println(targetValue);
+
         double perChannelTarget = (double)targetValue / (double)mosfetModuleCount;
+        // Serial.print("Per CH Target: ");
+        // Serial.println(perChannelTarget);
+        
+
 
         if(targetMode == 0)
         {
@@ -497,10 +543,12 @@ private:
         // Calcualte error value per channel
         for(int i = 0; i<4; i++)
         {
-            double error = perChannelTarget - latestReadings[i];
+            float error = perChannelTarget - latestReadings[i];
             targetErrors[i] = error;
         }
         
+        // Serial.print("Latest Readings: ");
+        // print_reading_array(latestReadings);
         // Serial.print("Target Errors: ");
         // print_reading_array(targetErrors);
     }
@@ -732,6 +780,27 @@ private:
             {
                 readings_voltage[i] = 0;
             }
+        }
+    }
+
+    uint16_t get_highest_pwm_output()
+    {
+        uint16_t maxOut = 0;
+        if(outputs_pwm[0] > maxOut)
+        {
+            maxOut = outputs_pwm[0];
+        }
+        if(outputs_pwm[1] > maxOut)
+        {
+            maxOut = outputs_pwm[1];
+        }
+        if(outputs_pwm[2] > maxOut)
+        {
+            maxOut = outputs_pwm[2];
+        }
+        if(outputs_pwm[3] > maxOut)
+        {
+            maxOut = outputs_pwm[3];
         }
     }
 
