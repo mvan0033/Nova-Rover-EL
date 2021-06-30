@@ -720,10 +720,15 @@ private:
             // Then used the curve equation here to make it 'semi-realistic'
             // Also added noise! (+/- 2mV on the output_pwm line)    
         
-            double baseVoltage1 = ((double)5*(double)outputs_pwm[0]+((double)(random(0,40)-20)/1000))/(double)65535;
-            double baseVoltage2 = ((double)5*(double)outputs_pwm[1]+((double)(random(0,40)-20)/1000))/(double)65535;
-            double baseVoltage3 = ((double)5*(double)outputs_pwm[2]+((double)(random(0,40)-20)/1000))/(double)65535;
-            double baseVoltage4 = ((double)5*(double)outputs_pwm[3]+((double)(random(0,40)-20)/1000))/(double)65535;
+            double baseClean1 = (double)5*(double)outputs_pwm[0]/(double)65535;
+            double baseClean2 = (double)5*(double)outputs_pwm[0]/(double)65535;
+            double baseClean3 = (double)5*(double)outputs_pwm[0]/(double)65535;
+            double baseClean4 = (double)5*(double)outputs_pwm[0]/(double)65535;
+
+            double baseVoltage1 = ((double)(random(0,40)-20)/(double)1000) + baseClean1;
+            double baseVoltage2 = ((double)(random(0,40)-20)/(double)1000) + baseClean2;
+            double baseVoltage3 = ((double)(random(0,40)-20)/(double)1000) + baseClean3;
+            double baseVoltage4 = ((double)(random(0,40)-20)/(double)1000) + baseClean4;
 
             Serial.println("BASE VOLTAGES");
             Serial.print(baseVoltage1,6);

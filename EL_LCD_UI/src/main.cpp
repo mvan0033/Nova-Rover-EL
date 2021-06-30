@@ -885,12 +885,12 @@ void isr0()
 {
   if(millis() - debounceTimer > 250)
   {
+    // Check direction
     turnDetected = true;
+    clockwise = digitalRead(ROTARY_ENCODER_CLK) != digitalRead(ROTARY_ENCODER_DT);
     debounceTimer = millis();
   }
 
-  // Check direction
-  clockwise = digitalRead(ROTARY_ENCODER_CLK) != digitalRead(ROTARY_ENCODER_DT);
 }
 
 // ISR for when the button on the rotary encoder is pressed
@@ -973,6 +973,9 @@ void loop()
   // Update global variables every 1 seconds
   if (millis() - referenceTime > 1000)
   {
+    // Update reference time
+    referenceTime = millis();
+    
     // Update variables for system monitor
     curCurrent = controller.get_total_current();
     curPower = controller.get_total_power();
@@ -1055,9 +1058,6 @@ void loop()
     {
       writeDataToSD();
     }
-
-    // Update reference time
-    referenceTime = millis();
   }
 
   if (turnDetected)
