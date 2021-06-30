@@ -213,7 +213,7 @@ class ControlLoop
         if(mode == 0 || mode == 1){
             targetMode = mode;
         }else{
-            Serial.println("Invalid targetMode!")
+            Serial.println("Invalid targetMode!");
         }
     }
 
