@@ -32,22 +32,58 @@ void setup(void)
   }      
 }
 
+int channel = 1;
+long lastResult = 0;
 
 void loop(void)
 {
-  unsigned long startMil = millis();
-
-  MCP342x::Config configIn = MCP342x::Config(MCP342x::channel1,MCP342x::continous,MCP342x::resolution18,MCP342x::gain1);
-  adc.configure(configIn);
-
-  // adc.convertAndRead(MCP342x::channel1,MCP342x::continous,MCP342x::resolution18,MCP342x::gain1,1,result,status);
+  MCP342x::Config configIn;
   long result;
   MCP342x::Config configOut;
+
+  switch(channel)
+  {
+    case 1:    
+      configIn = MCP342x::Config(MCP342x::channel1,MCP342x::continous,MCP342x::resolution18,MCP342x::gain1);
+      break;
+    case 2:
+      configIn = MCP342x::Config(MCP342x::channel2,MCP342x::continous,MCP342x::resolution18,MCP342x::gain1);
+      break;
+    case 3:
+      configIn = MCP342x::Config(MCP342x::channel3,MCP342x::continous,MCP342x::resolution18,MCP342x::gain1);
+      break;
+    case 4:
+      configIn = MCP342x::Config(MCP342x::channel4,MCP342x::continous,MCP342x::resolution18,MCP342x::gain1);
+      break;
+  }
+
+  adc.configure(configIn);
   adc.read(result,configOut);
 
-  unsigned long totalMils = millis() - startMil;
-  Serial.println(result);
-  Serial.print("TOOK: ");
-  Serial.println(totalMils);
-  delay(50);
+  // Only prints when ready!
+  if(configOut.isReady())
+  {
+    Serial.print("CH");
+    Serial.print(channel);
+    Serial.print(": ");
+    Serial.println(result);
+    channel++;
+    if(channel == 5)
+    {
+      channel = 1;
+    }
+  }else{
+    Serial.print(".");
+  }
+  
+  // if(result == lastResult)
+  // {
+  //   channel++;
+  //   if(channel == 5)
+  //   {
+  //     channel = 1;
+  //   }
+  //   lastResult = 0;
+  // }
+  // lastResult = result;
 }
