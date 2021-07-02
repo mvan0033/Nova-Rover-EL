@@ -37,13 +37,17 @@ void loop(void)
 {
   unsigned long startMil = millis();
 
-  long result;
-  MCP342x::Config status;
+  MCP342x::Config configIn = MCP342x::Config(MCP342x::channel1,MCP342x::continous,MCP342x::resolution18,MCP342x::gain1);
+  adc.configure(configIn);
 
-  adc.convertAndRead(MCP342x::channel1,MCP342x::continous,MCP342x::resolution14,MCP342x::gain1,1,result,status);
+  // adc.convertAndRead(MCP342x::channel1,MCP342x::continous,MCP342x::resolution18,MCP342x::gain1,1,result,status);
+  long result;
+  MCP342x::Config configOut;
+  adc.read(result,configOut);
 
   unsigned long totalMils = millis() - startMil;
   Serial.println(result);
   Serial.print("TOOK: ");
   Serial.println(totalMils);
+  delay(50);
 }
