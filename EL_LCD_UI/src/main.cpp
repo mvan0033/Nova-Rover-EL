@@ -398,7 +398,11 @@ void screen11()
   lcd.print("C");
   lcd.setCursor(3, 0);
   lcd.print("Time:");
-  lcd.print(elapsedTime);
+  lcd.print(elapsedTime/3600); // Print hours
+  lcd.print(":");
+  lcd.print((elapsedTime/60) % 60); // Print minutes
+  lcd.print(":");
+  lcd.print(elapsedTime % 60); // Print seconds
   lcd.print("s");
   lcd.setCursor(3, 6);
   lcd.write(byte(62));
