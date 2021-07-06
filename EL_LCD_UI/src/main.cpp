@@ -53,6 +53,7 @@ int timeLimitDigit1; // Hundreds digit
 int timeLimitDigit2; // Tens digit
 int timeLimitDigit3 = 1; // Units digit
 float timeLimit = 1;
+bool timeLimitEnable;
 
 // Variables for displaying low voltage values
 int lowVoltageDigit1; // Tens digit
@@ -284,8 +285,10 @@ void screen7()
   lcd.print(timeLimit, 0);
   lcd.print("mins");
   lcd.setCursor(1, 1);
-  lcd.print("Next");
+  lcd.print("No Time Limit");
   lcd.setCursor(2, 1);
+  lcd.print("Next");
+  lcd.setCursor(3, 1);
   lcd.print("Back");
   lcd.setCursor(0, 0);
   lcd.write(byte(62)); // Print an arrow character
@@ -398,13 +401,32 @@ void screen11()
   lcd.print(hotTemp);
   lcd.print("C");
   lcd.setCursor(3, 0);
-  lcd.print("Time:");
-  lcd.print(elapsedTime/3600); // Print hours
+  lcd.print("ET:");
+
+  // Print hours
+  if (elapsedTime/3600 < 10)
+  {
+    lcd.print("0");
+  }
+  lcd.print(elapsedTime/3600); 
   lcd.print(":");
-  lcd.print((elapsedTime/60) % 60); // Print minutes
+
+  // Print minutes
+  if (((elapsedTime/60) % 60) < 10)
+  {
+    lcd.print("0");
+  }
+  lcd.print((elapsedTime/60) % 60); 
   lcd.print(":");
-  lcd.print(elapsedTime % 60); // Print seconds
-  lcd.print("s");
+
+  // Print seconds
+  if ((elapsedTime % 60) < 10)
+  {
+    lcd.print("0");
+  }
+  lcd.print(elapsedTime % 60); 
+  
+  // Print >END
   lcd.setCursor(3, 6);
   lcd.write(byte(62));
   lcd.print("END");
@@ -435,9 +457,32 @@ void screen12()
   lcd.print(hotTemp);
   lcd.print("C");
   lcd.setCursor(3, 0);
-  lcd.print("Time:");
-  lcd.print(elapsedTime);
-  lcd.print("s");
+  lcd.print("ET:");
+
+  // Print hours
+  if (elapsedTime/3600 < 10)
+  {
+    lcd.print("0");
+  }
+  lcd.print(elapsedTime/3600); 
+  lcd.print(":");
+
+  // Print minutes
+  if (((elapsedTime/60) % 60) < 10)
+  {
+    lcd.print("0");
+  }
+  lcd.print((elapsedTime/60) % 60); 
+  lcd.print(":");
+
+  // Print seconds
+  if ((elapsedTime % 60) < 10)
+  {
+    lcd.print("0");
+  }
+  lcd.print(elapsedTime % 60); 
+  
+  // Print >END
   lcd.setCursor(3, 6);
   lcd.write(byte(62));
   lcd.print("END");
@@ -912,6 +957,7 @@ void isr1()
 
 void setup()
 {
+
   Serial.begin(9600);
 
   if (!rtc.begin())
@@ -1028,7 +1074,7 @@ void loop()
     }
     
     // Check elapsed time against time limit
-    if (elapsedTime / 60.0 >= timeLimit && controller.get_pwm_active_state())
+    if (elapsedTime / 60.0 >= timeLimit && controller.get_pwm_active_state() && timeLimitEnable)
     {
       // Terminate Analaysis
       controller.set_enable(false);
@@ -1155,7 +1201,7 @@ void loop()
     case 7: // Time limit screen
     {
       // Change selected option
-      optionSelection(3, 0, false);
+      optionSelection(4, 0, false);
       break;
     }
 
@@ -1455,13 +1501,21 @@ void loop()
         break;
       }
 
-      case 1: // Next
+      case 1: // No time limit
       {
         screen9();
+        timeLimitEnable = false;
         break;
       }
 
-      case 2: // Back
+      case 2: // Next
+      {
+        screen9();
+        timeLimitEnable = true;
+        break;
+      }
+
+      case 3: // Back
       {
         screen6();
         break;
