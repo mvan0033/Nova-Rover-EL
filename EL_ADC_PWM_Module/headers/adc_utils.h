@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <MCP342x.h>
 
+
 MCP342x::Resolution globalADCresolution = MCP342x::resolution14;
 
 long ADC_MAX_RAW = 8192; // Depends on RESOLUTION ^^^ ABOVE! (eg 2^18/2) (divide by 2 because it's single-ended mode)
