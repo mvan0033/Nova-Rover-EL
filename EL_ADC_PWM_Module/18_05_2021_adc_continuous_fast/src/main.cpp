@@ -7,9 +7,18 @@ It will also sweep the PWM output of the PWM driver, on all channels.
 #include <Wire.h>
 #include <MCP342x.h>
 #include "Adafruit_TLC59711.h"
-#include <adc_nonblocking.h>
 
+// IMPORTANT BITS
+#include <adc_nonblocking.h>
 ADCHandler adcCurrent = ADCHandler();
+// TO USE
+// Setup
+// adc.init(<i2caddr>,<average sample count>)
+// Loop
+// adc.update() (ALWAYS call this!)
+// adc.readAverage(<channel number>)
+// adc.readLatest(<channel number>)
+// Enjoy
 
 // // ADCs (0x68,0x69,0x6B,0x6C)
 // MCP342x adc1 = MCP342x(0x6B);
