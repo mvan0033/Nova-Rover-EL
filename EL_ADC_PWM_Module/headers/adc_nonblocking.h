@@ -95,7 +95,7 @@ class ADCHandler {
   public:
     void init(uint8_t i2cAddress, uint8_t averageCount)
     {
-      Serial.println("Setting up ADC connection.");
+      // Serial.println("Setting up ADC connection.");
       
       this->chip = MCP342x(i2cAddress);
 
@@ -110,12 +110,12 @@ class ADCHandler {
       MCP342x::generalCallReset();
       delay(1); // MC342x needs 300us to settle, wait 1ms
 
-      Serial.println("Checking I2C exists...");
+      // Serial.println("Checking I2C exists...");
       if(!util_check_i2c_device_exists(i2cAddress))
       {
-        Serial.print("Fail");
-      }else{
-        Serial.print("Success");
+        // Serial.print("Fail");
+        this->initSuccess = false;
+        return;
       }
 
       // Set config
@@ -124,7 +124,7 @@ class ADCHandler {
       this->initSuccess = true;
     }
 
-    void update()
+    int update()
     {
       /*
       Called as many times per second as possible in higher scope.
@@ -133,8 +133,10 @@ class ADCHandler {
       if(!this->initSuccess)
       {
         // Wait until ready.
-        return;
+        return -1;
       }
+
+      int readyChannel = -2; // Is set to the channel number when processed
 
       // Get chip ready status
       this->chip.read(this->temp,this->status);
@@ -142,6 +144,9 @@ class ADCHandler {
       // Check chip ready status
       if(this->status.isReady())
       {
+        // Set readyChannel 
+        readyChannel = this->chCurrent;
+        
         // Chip is ready! Latest reading is inside of temp
         this->processSample();
 
@@ -156,6 +161,8 @@ class ADCHandler {
         // Update device config!
         this->updateDeviceConfig();
       }
+
+      return readyChannel+1;
     }
 
     long readAverage(uint8_t channel)

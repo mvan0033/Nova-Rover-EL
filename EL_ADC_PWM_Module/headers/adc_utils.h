@@ -45,6 +45,13 @@ double adc_read_voltage(MCP342x *adcObject,MCP342x::Channel channel,double maxVo
   return valueScaled;
 }
 
+double raw_to_voltage(long value_raw, double maxVoltage, double maxRaw)
+{
+  // Scale by ADC_MAX raw val, and maxVoltage input.
+  double valueScaled = maxVoltage * (double)value_raw / (double)maxRaw;
+  return valueScaled;
+}
+
 double util_voltage_to_temperature(double voltage)
 {
     /*
