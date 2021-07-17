@@ -7,7 +7,7 @@
 // WITHOUT any of the PWM/ADC hardware modules.
 // Set to 1 for no hardware
 // Set to 0 for normal operation (expects I2C, SPI devices to be attached)
-#define NO_HARDWARE_MODE 0
+#define NO_HARDWARE_MODE 1
 
 #include <Adafruit_TLC59711.h>
 #include <adc_nonblocking.h>
@@ -74,14 +74,16 @@ public:
     uint16_t outputs_pwm[4] = {0, 0, 0, 0};
 
     /* PIDs, attached to relevant data points */
-    double Kp=1000, Ki=0.0, Kd=1.0;
-    PID module1PID = PID(&current_values[0], &outputs_pid[0], &target_values[0], Kp, Ki, Kd, DIRECT);
-    PID module2PID = PID(&current_values[1], &outputs_pid[1], &target_values[1], Kp, Ki, Kd, DIRECT);
-    PID module3PID = PID(&current_values[2], &outputs_pid[2], &target_values[2], Kp, Ki, Kd, DIRECT);
-    PID module4PID = PID(&current_values[3], &outputs_pid[3], &target_values[3], Kp, Ki, Kd, DIRECT);
+    double fastKp=100, fastKi=0.0, fastKd=0.0;
+    double Kp=1, Ki=0.0, Kd=0.0;
+    PID module1PID = PID(&current_values[0], &outputs_pid[0], &target_values[0], fastKp, fastKi, fastKd, DIRECT);
+    PID module2PID = PID(&current_values[1], &outputs_pid[1], &target_values[1], fastKp, fastKi, fastKd, DIRECT);
+    PID module3PID = PID(&current_values[2], &outputs_pid[2], &target_values[2], fastKp, fastKi, fastKd, DIRECT);
+    PID module4PID = PID(&current_values[3], &outputs_pid[3], &target_values[3], fastKp, fastKi, fastKd, DIRECT);
 
     // Debug output info
     unsigned long debugTime = millis();
+
 
     ControlLoop(Adafruit_TLC59711 *pwm_module, ADCHandler *adc_temperature, ADCHandler *adc_current, ADCHandler *adc_voltage)
     {
@@ -95,6 +97,17 @@ public:
 
     void init()
     {
+        // Attach things
+        this->module1PID.SetMode(MANUAL);
+        this->module2PID.SetMode(MANUAL);
+        this->module3PID.SetMode(MANUAL);
+        this->module4PID.SetMode(MANUAL);
+
+        this->module1PID.SetOutputLimits(-32768,32767);
+        this->module2PID.SetOutputLimits(-32768,32767);
+        this->module3PID.SetOutputLimits(-32768,32767);
+        this->module4PID.SetOutputLimits(-32768,32767);
+
 #if NO_HARDWARE_MODE == 1
         Serial.println("NO HARDWARE MODE ENABLED.");
         Serial.println("(See control_loop.h to change this)");
@@ -117,17 +130,6 @@ public:
         this->adc_current->setResolution(MCP342x::resolution16);
         this->adc_voltage->setResolution(MCP342x::resolution16);
 
-        // Attach things
-        this->module1PID.SetMode(MANUAL);
-        this->module2PID.SetMode(MANUAL);
-        this->module3PID.SetMode(MANUAL);
-        this->module4PID.SetMode(MANUAL);
-
-        this->module1PID.SetOutputLimits(-32768,32767);
-        this->module2PID.SetOutputLimits(-32768,32767);
-        this->module3PID.SetOutputLimits(-32768,32767);
-        this->module4PID.SetOutputLimits(-32768,32767);
-
         // Start ADcs
         this->adc_temperature->init();
         this->adc_current->init();
@@ -145,6 +147,13 @@ public:
         this->current_sample_status = this->adc_current->update();
         this->adc_temperature->update();
         this->adc_voltage->update();
+#else
+        this->current_sample_status++;
+        if(this->current_sample_status == 5)
+        {
+            this->current_sample_status = 1;
+        }
+        delay(500);
 #endif
 
         if (this->controlLoopError)
@@ -211,12 +220,8 @@ public:
             }
 
             // Print the readings
-            if(millis() - debugTime > 250)
-            {
-                Serial.println(" ");
-                print_all_readings();
-                debugTime = millis();
-            }
+            Serial.println(" ");
+            print_all_readings();
 
             // Update the PWM output per-channel, based on this error.
             this->compute_pids();
@@ -527,19 +532,44 @@ private:
         switch(this->current_sample_status)
         {
             case 1:
+                // Check close-ness to target
+                if(this->target_values[0] - this->current_values[0] < 2.5)
+                {
+                    this->module1PID.SetTunings(fastKp,Ki,Kd);
+                }else{
+                    this->module1PID.SetTunings(fastKp,fastKi,fastKd);
+                }
                 this->module1PID.Compute();
                 this->outputs_pwm[0] = nonoverflowAddition(this->outputs_pwm[0],(int16_t)this->outputs_pid[0]);
                 break;
             case 2:
-                // this->module2PID.Compute();
+                if(this->target_values[1] - this->current_values[1] < 2.5)
+                {
+                    this->module2PID.SetTunings(fastKp,Ki,Kd);
+                }else{
+                    this->module2PID.SetTunings(fastKp,fastKi,fastKd);
+                }
+                this->module2PID.Compute();
                 this->outputs_pwm[1] = nonoverflowAddition(this->outputs_pwm[1],(int16_t)this->outputs_pid[1]);
                 break;
             case 3:
-                // this->module3PID.Compute();
+                if(this->target_values[2] - this->current_values[2] < 2.5)
+                {
+                    this->module3PID.SetTunings(fastKp,Ki,Kd);
+                }else{
+                    this->module3PID.SetTunings(fastKp,fastKi,fastKd);
+                }
+                this->module3PID.Compute();
                 this->outputs_pwm[2] = nonoverflowAddition(this->outputs_pwm[2],(int16_t)this->outputs_pid[2]);
                 break;
             case 4:
-                // this->module4PID.Compute();
+                if(this->target_values[3] - this->current_values[3] < 2.5)
+                {
+                    this->module4PID.SetTunings(fastKp,Ki,Kd);
+                }else{
+                    this->module4PID.SetTunings(fastKp,fastKi,fastKd);
+                }
+                this->module4PID.Compute();
                 this->outputs_pwm[3] = nonoverflowAddition(this->outputs_pwm[3],(int16_t)this->outputs_pid[3]);
                 break;
             case -1:
@@ -705,15 +735,15 @@ private:
         this->readings_current array. (AMPS)
         */
 #if NO_HARDWARE_MODE == 0
-        this->readings_current[0] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readLatest(1), 5.0, this->adc_current->getChannelMax(1)));
-        this->readings_current[1] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readLatest(2), 5.0, this->adc_current->getChannelMax(2)));
-        this->readings_current[2] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readLatest(3), 5.0, this->adc_current->getChannelMax(3)));
-        this->readings_current[3] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readLatest(4), 5.0, this->adc_current->getChannelMax(4)));
+        this->readings_current[0] = raw_to_current(this->adc_current->readLatest(1), 5.0, this->adc_current->getChannelMax(1));
+        this->readings_current[1] = raw_to_current(this->adc_current->readLatest(2), 5.0, this->adc_current->getChannelMax(2));
+        this->readings_current[2] = raw_to_current(this->adc_current->readLatest(3), 5.0, this->adc_current->getChannelMax(3));
+        this->readings_current[3] = raw_to_current(this->adc_current->readLatest(4), 5.0, this->adc_current->getChannelMax(4));
 
-        this->readings_current_avg[0] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readAverage(1), 5.0, this->adc_current->getChannelMax(1)));
-        this->readings_current_avg[1] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readAverage(2), 5.0, this->adc_current->getChannelMax(2)));
-        this->readings_current_avg[2] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readAverage(3), 5.0, this->adc_current->getChannelMax(3)));
-        this->readings_current_avg[3] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readAverage(4), 5.0, this->adc_current->getChannelMax(4)));
+        this->readings_current_avg[0] = raw_to_current(this->adc_current->readAverage(1), 5.0, this->adc_current->getChannelMax(1));
+        this->readings_current_avg[1] = raw_to_current(this->adc_current->readAverage(2), 5.0, this->adc_current->getChannelMax(2));
+        this->readings_current_avg[2] = raw_to_current(this->adc_current->readAverage(3), 5.0, this->adc_current->getChannelMax(3));
+        this->readings_current_avg[3] = raw_to_current(this->adc_current->readAverage(4), 5.0, this->adc_current->getChannelMax(4));
 #else
         // In no hardware mode, we use the PWM settings
         // and 'pretend' it's letting more current through.
@@ -726,14 +756,14 @@ private:
         // Also added noise! (+/- 2mV on the output_pwm line)
 
         double baseClean1 = (double)5 * (double)this->outputs_pwm[0] / (double)65535;
-        double baseClean2 = (double)5 * (double)this->outputs_pwm[0] / (double)65535;
-        double baseClean3 = (double)5 * (double)this->outputs_pwm[0] / (double)65535;
-        double baseClean4 = (double)5 * (double)this->outputs_pwm[0] / (double)65535;
+        double baseClean2 = (double)5 * (double)this->outputs_pwm[1] / (double)65535;
+        double baseClean3 = (double)5 * (double)this->outputs_pwm[2] / (double)65535;
+        double baseClean4 = (double)5 * (double)this->outputs_pwm[3] / (double)65535;
 
-        double baseVoltage1 = ((double)(random(0, 40) - 20) / (double)1000) + baseClean1;
-        double baseVoltage2 = ((double)(random(0, 40) - 20) / (double)1000) + baseClean2;
-        double baseVoltage3 = ((double)(random(0, 40) - 20) / (double)1000) + baseClean3;
-        double baseVoltage4 = ((double)(random(0, 40) - 20) / (double)1000) + baseClean4;
+        double baseVoltage1 = baseClean1;
+        double baseVoltage2 = baseClean2;
+        double baseVoltage3 = baseClean3;
+        double baseVoltage4 = baseClean4;
 
         Serial.println("BASE VOLTAGES");
         Serial.print(baseVoltage1, 6);
@@ -776,10 +806,10 @@ private:
         this->readings_voltage[3] = raw_to_voltage(this->adc_voltage->readLatest(4), 5.0, this->adc_voltage->getChannelMax(4));
 #else
         // Non-connected noise
-        this->readings_voltage[0] = (float)random(-200, 200) / 10;
-        this->readings_voltage[1] = (float)random(-200, 200) / 10;
-        this->readings_voltage[2] = (float)random(-200, 200) / 10;
-        this->readings_voltage[3] = (float)random(-200, 200) / 10;
+        this->readings_voltage[0] = (float)random(-200, 200) / 1000;
+        this->readings_voltage[1] = (float)random(-200, 200) / 1000;
+        this->readings_voltage[2] = 30 + (float)random(-200, 200) / 1000;
+        this->readings_voltage[3] = (float)random(-200, 200) / 1000;
 
         // System load. 10th volt noise
         this->readings_voltage[this->load_voltage_channel-1] = 10 + (float)random(-10, 10) / (float)100;
