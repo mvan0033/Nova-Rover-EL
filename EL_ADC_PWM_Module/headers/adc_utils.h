@@ -1,54 +1,9 @@
 #include <Arduino.h>
-#include <MCP342x.h>
 
-
-MCP342x::Resolution globalADCresolution = MCP342x::resolution14;
-
-long ADC_MAX_RAW = 8192; // Depends on RESOLUTION ^^^ ABOVE! (eg 2^18/2) (divide by 2 because it's single-ended mode)
-
-double ADC_MAX_V = 5;
-
-/* 
-  Function to get a voltage reading from an ADC object, on a specified channel.
-  Will return 0 on error.
-*/
-long adc_read_raw(MCP342x *adcObject,MCP342x::Channel channel)
+double raw_to_voltage(long value_raw, double maxChannelVoltage, double maxRaw)
 {
-  long value_raw = 0;
-
-  // Return value 
-  MCP342x::Config adc_status; 
-
-  // Initiate a conversion; convertAndRead() will wait until it can be read
-  uint8_t error = adcObject->convertAndRead(channel, MCP342x::oneShot,globalADCresolution, MCP342x::gain1,100, value_raw, adc_status);
-
-  if (error)
-  {
-    // Conversion error.
-    Serial.print("ADC Read Error: ");
-    Serial.println(error);
-    return 0;
-  }
-  else
-  {
-    return value_raw;
-  }
-}
-
-double adc_read_voltage(MCP342x *adcObject,MCP342x::Channel channel,double maxVoltage)
-{
-  // Get raw value
-  long value_raw = adc_read_raw(adcObject,channel);
-
-  // Scale by ADC_MAX raw val, and maxVoltage input.
-  double valueScaled = maxVoltage * (double)value_raw / (double)ADC_MAX_RAW;
-  return valueScaled;
-}
-
-double raw_to_voltage(long value_raw, double maxVoltage, double maxRaw)
-{
-  // Scale by ADC_MAX raw val, and maxVoltage input.
-  double valueScaled = maxVoltage * (double)value_raw / (double)maxRaw;
+  // Scale by ADC_MAX raw val, and maxChannelVoltage input.
+  double valueScaled = maxChannelVoltage * (double)value_raw / (double)maxRaw;
   return valueScaled;
 }
 
@@ -118,16 +73,12 @@ double util_voltage_to_current(double voltage,double voltageRef)
     return I_TH;
 }
 
-double adc_read_temperature(MCP342x *adcObject,MCP342x::Channel channel)
+double raw_to_current(long value_raw, double maxChannelVoltage, double maxRaw)
 {
-  /* Convenience function to read a temperature directly */
-  double volt_result = adc_read_voltage(adcObject,channel,ADC_MAX_V);
-  return util_voltage_to_temperature(volt_result);
+  return util_voltage_to_current(raw_to_voltage(value_raw,maxChannelVoltage,maxRaw),2.5);
 }
 
-double adc_read_current(MCP342x *adcObject,MCP342x::Channel channel)
+double raw_to_temperature(long value_raw, double maxChannelVoltage, double maxRaw)
 {
-  /* Convenience function to read a temperature directly */
-  double volt_result = adc_read_voltage(adcObject,channel,ADC_MAX_V);
-  return util_voltage_to_current(volt_result,2.5);
+  return util_voltage_to_temperature(raw_to_voltage(value_raw,maxChannelVoltage,maxRaw));
 }

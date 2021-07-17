@@ -3,15 +3,23 @@ Leigh Oliver 18/05/2021
 Control feedback loop to maintain a set current.
 */
 #include <Arduino.h>
+#include <Wire.h>
+#include <SPI.h>
 #include <control_loop.h>
 
-// Control loop object which handles our PWM/ADC hardware.
-ControlLoop controller;
+// Define ADC function by addrress
+uint8_t adc_temperature_addr = 0x6B; // MARKED AS 0X69 ON THE PCB
+uint8_t adc_current_addr = 0x68; // MARKED AS 0X68 ON THE PCB
+uint8_t adc_voltage_addr = 0x6C; // MARKED AS 0X6A ON THE PCB
 
-double averageValueList[128];
-int avgIndex = 0;
-bool avgFull = false;
-double averageVal = 0;
+// Setup the PWM stuff
+Adafruit_TLC59711 pwmModule = Adafruit_TLC59711(1,7,8);
+ADCHandler adc_temperature = ADCHandler(adc_temperature_addr);
+ADCHandler adc_current = ADCHandler(adc_current_addr);
+ADCHandler adc_voltage = ADCHandler(adc_voltage_addr);
+
+// Control loop object which handles our PWM/ADC hardware.
+ControlLoop controller = ControlLoop(&pwmModule,&adc_temperature,&adc_current,&adc_voltage);
 
 void setup(void)
 {
@@ -19,7 +27,8 @@ void setup(void)
   Serial.begin(115200);
   Wire.begin();
 
-  // Setup control loop object (which initialises ADC/PWM hardware)
+  // Setup control loop object
+  // Attach out modules
   controller.init();
 
   // Set the controller mode
@@ -36,30 +45,6 @@ void loop(void)
 {
   // Update control loop!
   controller.update();
-  
-  averageValueList[avgIndex++] = controller.get_total_current();
-  if(avgIndex >= 128)
-  {
-    avgIndex = 0;
-    avgFull = true;
-  }
-
-  int avgLen = 128;
-  if(!avgFull)
-  {
-    avgLen = avgIndex;
-  }
-  
-  averageVal = 0;
-
-  for(int i = 0; i<avgLen; i++)
-  {
-    averageVal += averageValueList[i]/(double)avgLen;
-  }
-
-
-  Serial.print("CURRENT AVG: ");
-  Serial.println(averageVal,6);
 
   // Check error state (true means error)
   if(controller.get_error_state())

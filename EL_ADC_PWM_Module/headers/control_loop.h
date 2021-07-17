@@ -7,392 +7,22 @@
 // WITHOUT any of the PWM/ADC hardware modules.
 // Set to 1 for no hardware
 // Set to 0 for normal operation (expects I2C, SPI devices to be attached)
-#define NO_HARDWARE_MODE 1
+#define NO_HARDWARE_MODE 0
 
-#include <Wire.h>
-#include <SPI.h>
-
-#include "MCP342x.h"
 #include <Adafruit_TLC59711.h>
-
-#include "utils.h"
+#include <adc_nonblocking.h>
 #include "pwm_utils.h"
 #include "adc_utils.h"
-
-#define NUM_TLC59711 1
-#define data 6
-#define clock 5
-#define PWM_MAX 65535 // Maximum PWM value we can send (16 bit)
-
-#if NO_HARDWARE_MODE == 0
-// PWM MODULE OBJECT.
-// Please only define this once.
-Adafruit_TLC59711 pwm_module = Adafruit_TLC59711(NUM_TLC59711, clock, data);
-
-// ADCs (0x68,0x69,0x6B,0x6C)
-// uint8_t adc_addrs[4] = {0x68, 0x69, 0x6B, 0x6C};
-
-// Define ADC function by addrress
-uint8_t adc_temperature_addr = 0x6B; // MARKED AS 0X69 ON THE PCB
-uint8_t adc_current_addr = 0x68; // MARKED AS 0X68 ON THE PCB
-uint8_t adc_voltage_addr = 0x6C; // MARKED AS 0X6A ON THE PCB
-
-// Define the ADC objects 
-MCP342x adc_temperature = MCP342x(adc_temperature_addr);
-MCP342x adc_current = MCP342x(adc_current_addr);
-MCP342x adc_voltage = MCP342x(adc_voltage_addr);
-#endif
-
+#include <PID_v1.h>
 
 class ControlLoop
 {
-    public:
-    
-    int8_t load_voltage_channel = 3; // What channel of the adc_voltage chip, do we find our 0 to 75V LOAD voltage.
+public:
+    Adafruit_TLC59711 *pwm_module;
+    ADCHandler *adc_temperature;
+    ADCHandler *adc_current;
+    ADCHandler *adc_voltage;
 
-    void init()
-    {
-        #if NO_HARDWARE_MODE == 1
-            Serial.println("NO HARDWARE MODE ENABLED.");
-            Serial.println("(See control_loop.h to change this)");
-        #else
-            // Setup PWM module
-            Serial.print("Setting up PWM module...");
-            pwm_module.begin();
-            pwm_module.write();
-            pwm_module.simpleSetBrightness(127);
-            pwm_module.write();
-            pwm_set_duty_all(&pwm_module, 0);
-            Serial.println("Done.");
-
-            // Reset devices
-            Serial.print("Calling reset of all MCP3424 chips...");
-            MCP342x::generalCallReset();
-            delay(1); // MC342x needs 300us to settle, wait 1ms
-            Serial.println("Done.");
-
-            Serial.println("Checking for ADC chips...");
-
-            // Check for ADC modules SPECIFICALLY
-            if(!util_check_i2c_device_exists(adc_temperature_addr))
-            {
-                Serial.print("Temperature Reading ADC, ");
-                Serial.print(adc_temperature_addr,HEX);
-                Serial.println(", NOT FOUND.");
-            }
-
-            if(!util_check_i2c_device_exists(adc_voltage_addr))
-            {
-                Serial.print("Voltage Reading ADC, ");
-                Serial.print(adc_voltage_addr,HEX);
-                Serial.println(", NOT FOUND.");
-            }
-
-            if(!util_check_i2c_device_exists(adc_current_addr))
-            {
-                Serial.print("Current Reading ADC, ");
-                Serial.print(adc_current_addr,HEX);
-                Serial.println(", NOT FOUND.");
-            }
-        #endif
-    }
-
-    void update()
-    {
-        /* Performs actions based on the current global state */
-        /* Must be run as fast as possible */
-        if(controlLoopError)
-        {
-            // SET PWM TO ZERO
-            Serial.println("Control loop error. Setting PWMs to 0.");
-
-            // Reset outputs
-            reset_pwm_arrays_to_zero();
-
-            #if NO_HARDWARE_MODE == 0
-                pwm_set_duty_all(&pwm_module,0);
-            #endif
-
-            // RETURN
-            return;
-        }
-
-        if(controlLoopRunning)
-        {
-            // Read currents
-            read_currents();
-            // Check current limits, if non-zero return and signal error state.
-            int8_t result1 = check_current_limits();
-            if(result1 != -1)
-            {
-                controlLoopError = true;
-                errorType = 0; 
-                errorMOSFET = result1;
-                explain_limit_failure(result1,0);
-                return;
-            }
-
-            // Read voltages
-            read_voltages();
-            // Check power limits, if non-zero return and signal error state.
-            int8_t result2 = check_power_limits();
-            if(result2 != -1)
-            {
-                controlLoopError = true;
-                errorType = 1; 
-                errorMOSFET = result2;
-                explain_limit_failure(result2,1);
-                return;
-            }
-
-            // Read temperatures
-            read_temperatures();
-            // Check temperature limits, if non-zero return and signal error state.
-            int8_t result3 = check_temperature_limits();
-            if(result3 != -1)
-            {
-                controlLoopError = true;
-                errorType = 2; 
-                errorMOSFET = result3;
-                explain_limit_failure(result3,2);
-                return;
-            }
-
-            // Print the readings
-            // Serial.println(" ");
-            // print_all_readings();
-
-            // Update the target error
-            calculate_target_error_values();
-            // Update the PWM output per-channelm, based on this error.
-            calculate_pwm_output_values();
-            apply_pwm_output_values();
-
-        }else{
-            // Reset output PWMs
-            reset_pwm_arrays_to_zero();
-
-            // SET PWM TO ZERO
-            #if NO_HARDWARE_MODE == 0
-                // Sends zero to the PWM module
-                pwm_set_duty_all(pwm_module,0);
-            #else
-                Serial.println("Setting PWM to 0.");
-            #endif
-        }
-    }
-
-    void reset_errors()
-    {
-        reset_pwm_arrays_to_zero();
-        /* Resets an error state */
-        controlLoopError = false;
-    }
-    
-    void set_enable(bool state)
-    {
-        /* Enable / Disable the control loop */
-        /* Unless we are in an error state, then always be false. */
-        if (controlLoopError)
-        {
-            controlLoopRunning = false;
-        }
-        else
-        {
-            controlLoopRunning = state;
-        }
-    }
-
-    void set_target_mode(int mode)
-    {
-        /* 
-            Set the target mode: 
-                0 = Current Target
-                1 = Power Target 
-            */
-        if(mode == 0 || mode == 1){
-            targetMode = mode;
-        }else{
-            Serial.println("Invalid targetMode!");
-        }
-    }
-
-    void set_target_value(int value)
-    {
-        /*
-            Updates targetValue global variable.
-            Respects Amp or Power limits based on targetMode.
-            This is the value we are attempting to maintain with our control loop.
-            */
-        uint16_t tempValue = abs(value);
-
-        switch (targetMode)
-        {
-        case 0:
-            if (tempValue > currentLimit)
-            {
-                Serial.println("Target value above current limit! Clamping...");
-                tempValue = currentLimit;
-            }
-            if (tempValue < 0)
-            {
-                tempValue = 0;
-            }
-            // Apply
-            targetValue = tempValue;
-            break;
-
-        case 1:
-            if (tempValue > powerLimit)
-            {
-                Serial.println("Target value above power limit! Clamping...");
-                tempValue = powerLimit;
-            }
-            if (tempValue < 0)
-            {
-                tempValue = 0;
-            }
-            // Apply
-            targetValue = tempValue;
-            break;
-        }
-    }
-
-    void print_reading_array(double arr[])
-    {
-        for(int i =0; i<3; i++)
-        {
-            Serial.print(arr[i]);
-            Serial.print(",");
-        }
-        Serial.println(arr[3]);
-    }
-
-    void print_output_array(uint16_t arr[])
-    {
-        for(int i =0; i<3; i++)
-        {
-            Serial.print(arr[i]);
-            Serial.print(",");
-        }
-        Serial.println(arr[3]);
-    }
-
-    void print_all_readings()
-    {
-        /* Prints the Temperature, Current, and Voltage readings */
-        Serial.println("CURRENTS");
-        print_reading_array(readings_current);
-        Serial.println("VOLTAGES");
-        print_reading_array(readings_voltage);
-        Serial.println("TEMPERATURES");
-        print_reading_array(readings_temperature);
-    }
-
-    bool get_error_state()
-    {
-        return controlLoopError;
-    }
-
-    int8_t get_error_module()
-    {
-        return errorMOSFET;
-    }
-
-    int8_t get_error_type()
-    {
-        return errorType;
-    }
-
-    double get_total_current()
-    {
-        // Return combined current throughput
-        double _temp[4] = {0,0,0,0};
-        for(int i = 0; i<4; i++)
-        {
-            _temp[i] = readings_current[i];
-        }
-        return _temp[0] + _temp[1] + _temp[2] + _temp[3];
-    }
-
-    double get_total_power()
-    {
-        // Return combined power throughput
-        double _temp[4] = {0,0,0,0};
-        for(int i = 0; i<4; i++)
-        {
-            _temp[i] = readings_current[i] * readings_voltage[load_voltage_channel];
-        }
-
-        return _temp[0] + _temp[1] + _temp[2] + _temp[3];
-    }
-
-    double get_total_voltage()
-    {
-        // Return system load voltage
-        return readings_voltage[load_voltage_channel];
-    }
-
-    double get_highest_temperature()
-    {
-        // Returns highest of the temperature readings
-        double temp = readings_temperature[0];
-        for(int i = 0; i<4; i++)
-        {
-            if(readings_temperature[i] > temp)
-            {
-                temp = readings_temperature[i];
-            }
-        }
-
-        return temp;
-    }
-
-    
-    bool get_pwm_active_state()
-    {
-        // Returns a boolean that signifies if PWM outputs are enabled or not.
-        // This is another indication that the system is running.
-        // Here, we just check if all outputs are zero.
-        if(outputs_pwm[0] == 0 && outputs_pwm[1] == 0 && outputs_pwm[2] == 0 && outputs_pwm[3] == 0)
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    uint16_t get_global_limit_current()
-    {
-        return currentLimit;
-    }
-
-    uint16_t get_global_limit_power()
-    {
-        return powerLimit;
-    }
-
-    uint16_t get_global_limit_temperature()
-    {
-        return temperatureLimit;
-    }
-
-    uint16_t set_global_limit_current(uint16_t val)
-    {
-        currentLimit = val;
-    }
-
-    uint16_t set_global_limit_power(uint16_t val)
-    {
-        powerLimit = val;
-    }
-
-    uint16_t set_global_limit_temperature(uint16_t val)
-    {
-        temperatureLimit = val;
-    }
-
-private:
     /* HOW MANY MOSFET BOARDS DO WE HAVE */
     // We will split the current across these modules,
     // and according to the target values.
@@ -407,185 +37,549 @@ private:
     */
 
     int8_t mosfetModuleCount = 4;
+    
 
     /* Control loop targets */
     bool controlLoopRunning = false; // If false, set all outputs to zero. If true we enable control loop.
     bool controlLoopError = false;   // If true, we need to stop all activity until RESET is called.
-    int8_t errorType = 0; // What kind of error? 0 for current, 1 for power, 2 for temperature
-    int8_t errorMOSFET = 0; // What mosfet module experienced this error.
+    int8_t errorType = 0;            // What kind of error? 0 for current, 1 for power, 2 for temperature
+    int8_t errorMOSFET = 0;          // What mosfet module experienced this error.
 
-    uint16_t targetMode = 0;              // 0 for current target. 1 for power target.
-    uint16_t targetValue = 0;             // Target value (could be Amps or Watts)
-    
-    /* Feedback variable */
-    double targetErrors[4] = {0,0,0,0}; // Calculated error from our targetValue, identified PER-CHANNEL.
+    uint16_t targetMode = 0;  // 0 for current target. 1 for power target.
+    uint16_t targetValue = 0; // Target value (could be Amps or Watts)
 
     /* GLOBAL SAFETY LIMITS */
-    uint16_t currentLimit = 100; // AMPS
-    uint16_t powerLimit = 1000;  // WATTS
-    uint16_t temperatureLimit = 600;  // DEGREES C
+    uint16_t currentLimit = 100;     // AMPS
+    uint16_t powerLimit = 1000;      // WATTS
+    uint16_t temperatureLimit = 600; // DEGREES C
 
     /* Latest ADC readings per channel */
     // These are updated only when the MCP3424 chip has a fresh set of readings for us.
     // This is so our update() loop can execute as fast as possible!
-    double readings_temperature[4] = {0,0,0,0};
-    double readings_current[4] = {0,0,0,0};
-    double readings_voltage[4] = {0,0,0,0};
+    double readings_temperature[4] = {0, 0, 0, 0};
+    double readings_current[4] = {0, 0, 0, 0};
+    double readings_current_avg[4] = {0, 0, 0, 0};
+    double readings_voltage[4] = {0, 0, 0, 0};
+    uint8_t load_voltage_channel = 3; // Which channel of this->readings_voltage is the primary load voltage.
+
+    /* Current per-mosftet target (could be watts or amps!). Reflects this->targetValue.*/
+    double target_values[4] = {0,0,0,0};
+
+    /* The current per-module measurement value (this could be Amps or Watts!). Reflects this->targetValue. */
+    double current_values[4] = {0,0,0,0};
+    int current_sample_status = 0;
 
     /* PMW Output variables */
-    uint16_t outputs_pwm[4] = {0,0,0,0};
-    
-    /* PWM feedback loop parameters */
-    double pwm_proportional_coeff = 1; // How fast do we increment in the direction of our goal
-    double pwm_rampup_threshold = 49000; // Jump here at first
+    double outputs_pid[4] = {0, 0, 0, 0};
+    uint16_t outputs_pwm[4] = {0, 0, 0, 0};
 
+    /* PIDs, attached to relevant data points */
+    double Kp=1000, Ki=0.0, Kd=1.0;
+    PID module1PID = PID(&current_values[0], &outputs_pid[0], &target_values[0], Kp, Ki, Kd, DIRECT);
+    PID module2PID = PID(&current_values[1], &outputs_pid[1], &target_values[1], Kp, Ki, Kd, DIRECT);
+    PID module3PID = PID(&current_values[2], &outputs_pid[2], &target_values[2], Kp, Ki, Kd, DIRECT);
+    PID module4PID = PID(&current_values[3], &outputs_pid[3], &target_values[3], Kp, Ki, Kd, DIRECT);
+
+    // Debug output info
+    unsigned long debugTime = millis();
+
+    ControlLoop(Adafruit_TLC59711 *pwm_module, ADCHandler *adc_temperature, ADCHandler *adc_current, ADCHandler *adc_voltage)
+    {
+        // Attach modules
+        this->pwm_module = pwm_module;
+
+        this->adc_temperature = adc_temperature;
+        this->adc_current = adc_current;
+        this->adc_voltage = adc_voltage;
+    }
+
+    void init()
+    {
+#if NO_HARDWARE_MODE == 1
+        Serial.println("NO HARDWARE MODE ENABLED.");
+        Serial.println("(See control_loop.h to change this)");
+#else
+        Serial.println("HARDWARE MODE ENABLED.");
+        Serial.println("(See control_loop.h to change this)");
+
+        // Setup PWM module
+        Serial.print("Setting up PWM module...");
+        this->pwm_module->begin();
+        this->pwm_module->write();
+        this->pwm_module->simpleSetBrightness(0); // Maximises voltage range upward
+
+        this->pwm_module->write();
+        pwm_set_duty_all(this->pwm_module, 0);
+        Serial.println("Done.");
+
+        // Reset devices
+        this->adc_temperature->setResolution(MCP342x::resolution18);
+        this->adc_current->setResolution(MCP342x::resolution16);
+        this->adc_voltage->setResolution(MCP342x::resolution16);
+
+        // Attach things
+        this->module1PID.SetMode(MANUAL);
+        this->module2PID.SetMode(MANUAL);
+        this->module3PID.SetMode(MANUAL);
+        this->module4PID.SetMode(MANUAL);
+
+        this->module1PID.SetOutputLimits(-32768,32767);
+        this->module2PID.SetOutputLimits(-32768,32767);
+        this->module3PID.SetOutputLimits(-32768,32767);
+        this->module4PID.SetOutputLimits(-32768,32767);
+
+        // Start ADcs
+        this->adc_temperature->init();
+        this->adc_current->init();
+        this->adc_voltage->init();
+#endif
+    }
+
+    void update()
+    {
+/* Performs actions based on the current global state */
+/* Must be run as fast as possible */
+
+/* Regardless of control loop state, always update the ADC chips! */
+#if NO_HARDWARE_MODE == 0
+        this->current_sample_status = this->adc_current->update();
+        this->adc_temperature->update();
+        this->adc_voltage->update();
+#endif
+
+        if (this->controlLoopError)
+        {
+            // SET PWM TO ZERO
+            Serial.println("Control loop error. Setting PWMs to 0.");
+
+            // Reset outputs
+            this->reset_pwm_arrays_to_zero();
+
+#if NO_HARDWARE_MODE == 0
+            pwm_set_duty_all(pwm_module, 0);
+#endif
+
+            // RETURN
+            return;
+        }
+
+        if (this->controlLoopRunning)
+        {
+            this->module1PID.SetMode(AUTOMATIC);
+            this->module2PID.SetMode(AUTOMATIC);
+            this->module3PID.SetMode(AUTOMATIC);
+            this->module4PID.SetMode(AUTOMATIC);
+    
+
+            // Read currents
+            this->read_currents();
+            // Check current limits, if non-zero return and signal error state.
+            int8_t result1 = this->check_current_limits();
+            if (result1 != -1)
+            {
+                this->controlLoopError = true;
+                this->errorType = 0;
+                this->errorMOSFET = result1;
+                this->explain_limit_failure(result1, 0);
+                return;
+            }
+
+            // Read voltages
+            this->read_voltages();
+            // Check power limits, if non-zero return and signal error state.
+            int8_t result2 = this->check_power_limits();
+            if (result2 != -1)
+            {
+                this->controlLoopError = true;
+                this->errorType = 1;
+                this->errorMOSFET = result2;
+                this->explain_limit_failure(result2, 1);
+                return;
+            }
+
+            // Read temperatures
+            this->read_temperatures();
+            // Check temperature limits, if non-zero return and signal error state.
+            int8_t result3 = this->check_temperature_limits();
+            if (result3 != -1)
+            {
+                this->controlLoopError = true;
+                this->errorType = 2;
+                this->errorMOSFET = result3;
+                this->explain_limit_failure(result3, 2);
+                return;
+            }
+
+            // Print the readings
+            if(millis() - debugTime > 250)
+            {
+                Serial.println(" ");
+                print_all_readings();
+                debugTime = millis();
+            }
+
+            // Update the PWM output per-channel, based on this error.
+            this->compute_pids();
+            this->apply_pwm_output_values();
+        }
+        else
+        {
+            // Stop PIDs
+            this->module1PID.SetMode(MANUAL);
+            this->module2PID.SetMode(MANUAL);
+            this->module3PID.SetMode(MANUAL);
+            this->module4PID.SetMode(MANUAL);
+            
+            // Reset output PWMs
+            this->reset_pwm_arrays_to_zero();
+
+// SET PWM TO ZERO
+#if NO_HARDWARE_MODE == 0
+            // Sends zero to the PWM module
+            pwm_set_duty_all(pwm_module, 0);
+#else
+            Serial.println("Setting PWM to 0.");
+#endif
+        }
+    }
+
+    void reset_errors()
+    {
+        this->reset_pwm_arrays_to_zero();
+        /* Resets an error state */
+        this->controlLoopError = false;
+    }
+
+    void set_enable(bool state)
+    {
+        /* Enable / Disable the control loop */
+        /* Unless we are in an error state, then always be false. */
+        if (this->controlLoopError)
+        {
+            this->controlLoopRunning = false;
+        }
+        else
+        {
+            this->controlLoopRunning = state;
+        }
+    }
+
+    void set_target_mode(int mode)
+    {
+        /* 
+            Set the target mode: 
+                0 = Current Target
+                1 = Power Target 
+            */
+        if (mode == 0 || mode == 1)
+        {
+            this->targetMode = mode;
+        }
+        else
+        {
+            Serial.println("Invalid this->targetMode!");
+        }
+    }
+
+    void set_target_value(int value)
+    {
+        /*
+            Updates this->targetValue global variable.
+            Respects Amp or Power limits based on this->targetMode.
+            This is the value we are attempting to maintain with our control loop.
+            */
+        uint16_t tempValue = abs(value);
+
+        switch (this->targetMode)
+        {
+        case 0:
+            if (tempValue > this->currentLimit)
+            {
+                Serial.println("Target value above current limit! Clamping...");
+                tempValue = this->currentLimit;
+            }
+            if (tempValue < 0)
+            {
+                tempValue = 0;
+            }
+            // Apply
+            this->targetValue = tempValue;
+            break;
+
+        case 1:
+            if (tempValue > this->powerLimit)
+            {
+                Serial.println("Target value above power limit! Clamping...");
+                tempValue = this->powerLimit;
+            }
+            if (tempValue < 0)
+            {
+                tempValue = 0;
+            }
+            // Apply
+            this->targetValue = tempValue;
+            break;
+        }
+    }
+
+    void print_double_array(double arr[])
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            Serial.print(arr[i]);
+            Serial.print(",");
+        }
+        Serial.println(arr[3]);
+    }
+
+    void print_uint16t_array(uint16_t arr[])
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            Serial.print(arr[i]);
+            Serial.print(",");
+        }
+        Serial.println(arr[3]);
+    }
+
+    void print_all_readings()
+    {
+        /* Prints the Temperature, Current, and Voltage readings */
+        Serial.println("CURRENTS");
+        this->print_double_array(this->readings_current);
+        Serial.println("CURRENTS AVG");
+        this->print_double_array(this->readings_current_avg);
+        Serial.println("VOLTAGES");
+        this->print_double_array(this->readings_voltage);
+        Serial.println("TEMPERATURES");
+        this->print_double_array(this->readings_temperature);
+        Serial.println("PWM OUTPUTS");
+        this->print_uint16t_array(this->outputs_pwm);
+    }
+
+    bool get_error_state()
+    {
+        return this->controlLoopError;
+    }
+
+    int8_t get_error_module()
+    {
+        return this->errorMOSFET;
+    }
+
+    int8_t get_error_type()
+    {
+        return this->errorType;
+    }
+
+    double get_total_current()
+    {
+        // Return combined current throughput
+        double _temp[4] = {0, 0, 0, 0};
+        for (int i = 0; i < 4; i++)
+        {
+            _temp[i] = this->readings_current[i];
+        }
+        return _temp[0] + _temp[1] + _temp[2] + _temp[3];
+    }
+
+    double get_total_power()
+    {
+        // Return combined power throughput
+        double _temp[4] = {0, 0, 0, 0};
+        for (int i = 0; i < 4; i++)
+        {
+            _temp[i] = this->readings_current[i] * this->readings_voltage[this->load_voltage_channel-1];
+        }
+
+        return _temp[0] + _temp[1] + _temp[2] + _temp[3];
+    }
+
+    double get_total_voltage()
+    {
+        // Return system load voltage
+        return this->readings_voltage[this->load_voltage_channel-1];
+    }
+
+    double get_highest_temperature()
+    {
+        // Returns highest of the temperature readings
+        double temp = this->readings_temperature[0];
+        for (int i = 0; i < 4; i++)
+        {
+            if (this->readings_temperature[i] > temp)
+            {
+                temp = this->readings_temperature[i];
+            }
+        }
+
+        return temp;
+    }
+
+    bool get_pwm_active_state()
+    {
+        // Returns a boolean that signifies if PWM outputs are enabled or not.
+        // This is another indication that the system is running.
+        // Here, we just check if all outputs are zero.
+        if (this->outputs_pwm[0] == 0 && this->outputs_pwm[1] == 0 && this->outputs_pwm[2] == 0 && this->outputs_pwm[3] == 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    uint16_t get_global_limit_current()
+    {
+        return this->currentLimit;
+    }
+
+    uint16_t get_global_limit_power()
+    {
+        return this->powerLimit;
+    }
+
+    uint16_t get_global_limit_temperature()
+    {
+        return this->temperatureLimit;
+    }
+
+    void set_global_limit_current(uint16_t val)
+    {
+        this->currentLimit = val;
+    }
+
+    void set_global_limit_power(uint16_t val)
+    {
+        this->powerLimit = val;
+    }
+
+    void set_global_limit_temperature(uint16_t val)
+    {
+        this->temperatureLimit = val;
+    }
+
+private:
     /* Apply per-channel PWM */
     void apply_pwm_output_values()
     {
-        #if NO_HARDWARE_MODE == 0
-            pwm_set_duty(&pwm_module,0,outputs_pwm[0]);
-            pwm_set_duty(&pwm_module,1,outputs_pwm[1]);
-            pwm_set_duty(&pwm_module,2,outputs_pwm[2]);
-            pwm_set_duty(&pwm_module,3,outputs_pwm[3]);
-        #endif
+#if NO_HARDWARE_MODE == 0
+        pwm_set_duty(this->pwm_module, 0, this->outputs_pwm[0]);
+        pwm_set_duty(this->pwm_module, 1, this->outputs_pwm[1]);
+        pwm_set_duty(this->pwm_module, 2, this->outputs_pwm[2]);
+        pwm_set_duty(this->pwm_module, 3, this->outputs_pwm[3]);
+#endif
     }
+
+    uint16_t nonoverflowAddition(uint16_t a, int16_t b)
+    {
+        uint16_t result = 0;
+
+        // If a + b both positive result in < a, we overflowed.
+        if(b >= 0)
+        {
+            result = a + b;
+
+            if(result < a)
+            {
+                // Overflow occured.
+                result = 65535;
+            }
+        }else{
+            result = a + b;
+            if(result > a)
+            {
+                // Overflow occured
+                result = 0;
+            }
+        }
+
+        return result;
+    } 
 
     /* From per-channel errors, update the PWM outputs */
-    void calculate_pwm_output_values()
+    void compute_pids()
     {
-        for(int i = 0; i<4; i++)
-        {
-            double pwmError = 0;
+        // 1. Update target per-mosfet values
+        double perModuleTarget = this->targetValue / this->mosfetModuleCount;
+        this->target_values[0] = perModuleTarget;
+        this->target_values[1] = perModuleTarget;
+        this->target_values[2] = perModuleTarget;
+        this->target_values[3] = perModuleTarget;
 
-            if(outputs_pwm[i] < pwm_rampup_threshold)
-            {
-                pwmError = (pwm_rampup_threshold) - outputs_pwm[i];
-            }else{
-                pwmError = targetErrors[i] * pwm_proportional_coeff;
-
-                if(pwmError > 10)
-                {
-                    pwmError = 10;
-                }
-                if(pwmError < -10)
-                {
-                    pwmError = -10;
-                }
-            }
-            
-            // Store value before increment
-            uint16_t preUpdateValue = (uint16_t)outputs_pwm[i];
-            int32_t pwmIncrement = (int32_t)floor(pwmError);
-
-            // Perform increment
-            outputs_pwm[i] += pwmIncrement;
-
-            // Check for overflow, if we increased in a positive direction.
-            if(pwmIncrement > 0)
-            {
-                if(outputs_pwm[i] < preUpdateValue)
-                {
-                    // Overflow occured. Clamp to MAX.
-                    outputs_pwm[i] = PWM_MAX;
-                }
-            }
-            // Check for underflow, if we decreased the pwm value.
-            if(pwmIncrement < 0)
-            {
-                if(outputs_pwm[i] > preUpdateValue)
-                {
-                    // Underflow occured. Clamp to zero
-                    outputs_pwm[i] = 0;
-                }
-            }
-
-            Serial.print("outputs_pwm[");
-            Serial.print(i);
-            Serial.print("] += ");
-            Serial.println(pwmIncrement);
-        }
-
-        Serial.println("");
-    }
-
-    /* Update the targetErrors per channel */
-    void calculate_target_error_values()
-    {
-        // Depending on mode we calculate target error.
-        double latestReadings[4] = {0,0,0,0};
-        // Serial.print("Target Value: ");
-        // Serial.println(targetValue);
-
-        double perChannelTarget = (double)targetValue / (double)mosfetModuleCount;
-        // Serial.print("Per CH Target: ");
-        // Serial.println(perChannelTarget);
-        
-
-
+        // 2. Update current_mosfet_values
         if(targetMode == 0)
         {
-            // Reading is just the currents per channel
-            for(int i = 0; i<4; i++)
-            {
-                latestReadings[i] = readings_current[i];
-            }
+            this->current_values[0] = this->readings_current[0];
+            this->current_values[1] = this->readings_current[1];
+            this->current_values[2] = this->readings_current[2];
+            this->current_values[3] = this->readings_current[3];
+        }else{
+            this->current_values[0] = this->readings_current[0] * this->readings_voltage[this->load_voltage_channel-1];
+            this->current_values[1] = this->readings_current[1] * this->readings_voltage[this->load_voltage_channel-1];
+            this->current_values[2] = this->readings_current[2] * this->readings_voltage[this->load_voltage_channel-1];
+            this->current_values[3] = this->readings_current[3] * this->readings_voltage[this->load_voltage_channel-1];
         }
 
-        if(targetMode == 1)
+        // Depending on latest sample state
+        // 3. Re-compute PIDs
+        // 4. Apply efforts
+        switch(this->current_sample_status)
         {
-            // Reading is the current per channel * system voltage
-            for(int i = 0; i<4; i++)
-            {
-                latestReadings[i] = readings_current[i] * readings_voltage[load_voltage_channel];
-            }
+            case 1:
+                this->module1PID.Compute();
+                this->outputs_pwm[0] = nonoverflowAddition(this->outputs_pwm[0],(int16_t)this->outputs_pid[0]);
+                break;
+            case 2:
+                // this->module2PID.Compute();
+                this->outputs_pwm[1] = nonoverflowAddition(this->outputs_pwm[1],(int16_t)this->outputs_pid[1]);
+                break;
+            case 3:
+                // this->module3PID.Compute();
+                this->outputs_pwm[2] = nonoverflowAddition(this->outputs_pwm[2],(int16_t)this->outputs_pid[2]);
+                break;
+            case 4:
+                // this->module4PID.Compute();
+                this->outputs_pwm[3] = nonoverflowAddition(this->outputs_pwm[3],(int16_t)this->outputs_pid[3]);
+                break;
+            case -1:
+                break;
         }
-
-        // Calcualte error value per channel
-        for(int i = 0; i<4; i++)
-        {
-            float error = perChannelTarget - latestReadings[i];
-            targetErrors[i] = error;
-        }
-        
-        // Serial.print("Latest Readings: ");
-        // print_reading_array(latestReadings);
-        // Serial.print("Target Errors: ");
-        // print_reading_array(targetErrors);
     }
 
     /* Print messages as a result of limit exceed */
-    void explain_limit_failure(int8_t result_code,int8_t failureMode)
+    void explain_limit_failure(int8_t result_code, int8_t failureMode)
     {
         // Result code determines which MOSFET failed
         // Failure mode 0 means current, 1 means power, 2 means temperature
-        switch(failureMode)
+        switch (failureMode)
         {
-            case 0:
-                Serial.print("CURRENT LIMIT ON MOSFET #");
-                Serial.println(result_code);
-                break;
-            case 1:
-                Serial.print("POWER LIMIT ON MOSFET #");
-                Serial.println(result_code);
-                break;
-            case 2:
-                Serial.print("TEMPERATURE LIMIT ON MOSFET #");
-                Serial.println(result_code);
-                break;
+        case 0:
+            Serial.print("CURRENT LIMIT ON MOSFET #");
+            Serial.println(result_code);
+            break;
+        case 1:
+            Serial.print("POWER LIMIT ON MOSFET #");
+            Serial.println(result_code);
+            break;
+        case 2:
+            Serial.print("TEMPERATURE LIMIT ON MOSFET #");
+            Serial.println(result_code);
+            break;
         }
     }
 
     /* Check current, power, temperature limits */
     int8_t check_current_limits()
     {
-        double perChannelLimit = (double)currentLimit / (double)mosfetModuleCount;
-        for(int i = 0; i<4; i++)
+        double perChannelLimit = (double)this->currentLimit / (double)this->mosfetModuleCount;
+        for (int i = 0; i < 4; i++)
         {
-            if(readings_current[i] > perChannelLimit)
+            if (this->readings_current[i] > perChannelLimit)
             {
                 // Return index of the failing mosfet.
                 return i;
-            }            
+            }
         }
 
         // No error
@@ -594,16 +588,16 @@ private:
 
     int8_t check_power_limits()
     {
-        double perChannelLimit = (double)currentLimit / (double)mosfetModuleCount;
-        perChannelLimit = perChannelLimit * readings_voltage[load_voltage_channel]; // TODO: CHANGE TO PROPER VOLTAGE READING CHANNEL
+        double perChannelLimit = (double)this->currentLimit / (double)this->mosfetModuleCount;
+        perChannelLimit = perChannelLimit * this->readings_voltage[this->load_voltage_channel-1]; // TODO: CHANGE TO PROPER VOLTAGE READING CHANNEL
 
-        for(int i = 0; i<4; i++)
+        for (int i = 0; i < 4; i++)
         {
-            if(readings_current[i]* readings_voltage[load_voltage_channel] > perChannelLimit)
+            if (this->readings_current[i] * this->readings_voltage[this->load_voltage_channel-1] > perChannelLimit)
             {
                 // Return index of the failing mosfet.
                 return i;
-            }            
+            }
         }
 
         // No error
@@ -612,55 +606,55 @@ private:
 
     int8_t check_temperature_limits()
     {
-        double perChannelLimit = temperatureLimit;
+        double perChannelLimit = this->temperatureLimit;
 
-        for(int i = 0; i<4; i++)
+        for (int i = 0; i < 4; i++)
         {
-            if(readings_temperature[i] > perChannelLimit)
+            if (this->readings_temperature[i] > perChannelLimit)
             {
                 // Return index of the failing mosfet.
                 return i;
-            }            
+            }
         }
 
         // No error
         return -1;
-    }    
-
+    }
 
     /* Functions for reading ADCs */
-    void read_temperatures() 
+    void read_temperatures()
     {
-        /* Read all the temperature ADC channels and store into 
-        readings_temperature array. (Degrees Celcius)
+/* Read all the temperature ADC channels and store into 
+        this->readings_temperature array. (Degrees Celcius)
         */
-        #if NO_HARDWARE_MODE == 0
-            readings_temperature[0] = adc_read_temperature(&adc_temperature,MCP342x::channel1);
-            readings_temperature[1] = adc_read_temperature(&adc_temperature,MCP342x::channel2);
-            readings_temperature[2] = adc_read_temperature(&adc_temperature,MCP342x::channel3);
-            readings_temperature[3] = adc_read_temperature(&adc_temperature,MCP342x::channel4);
-        #else
-            // In no hardware mode, we set all temperatures to 30 deg, plus some random noise.
-            // We also simulate the time it takes to perform a reading by delaying here.
-            readings_temperature[0] = 30 + (float)(random(0,40)-20)/100;
-            readings_temperature[1] = 30 + (float)(random(0,40)-20)/100;
-            readings_temperature[2] = 30 + (float)(random(0,40)-20)/100;
-            readings_temperature[3] = 30 + (float)(random(0,40)-20)/100;
-            
-            // At 14-bit precision, we can expect ~66 ms delay for a 4-IC reading.
-            // See MCP3424 for samples-per-second figures, to determine this.
-            delay(66);
-        #endif
+#if NO_HARDWARE_MODE == 0
+        this->readings_temperature[0] = raw_to_temperature(this->adc_temperature->readLatest(1), 5.0, this->adc_temperature->getChannelMax(1));
+        this->readings_temperature[1] = raw_to_temperature(this->adc_temperature->readLatest(2), 5.0, this->adc_temperature->getChannelMax(2));
+        this->readings_temperature[2] = raw_to_temperature(this->adc_temperature->readLatest(3), 5.0, this->adc_temperature->getChannelMax(3));
+        this->readings_temperature[3] = raw_to_temperature(this->adc_temperature->readLatest(4), 5.0, this->adc_temperature->getChannelMax(4));
+#else
+        // In no hardware mode, we set all temperatures to 30 deg, plus some random noise.
+        // We also simulate the time it takes to perform a reading by delaying here.
+        this->readings_temperature[0] = 30 + (float)(random(0, 40) - 20) / 100;
+        this->readings_temperature[1] = 30 + (float)(random(0, 40) - 20) / 100;
+        this->readings_temperature[2] = 30 + (float)(random(0, 40) - 20) / 100;
+        this->readings_temperature[3] = 30 + (float)(random(0, 40) - 20) / 100;
+
+        // At 14-bit precision, we can expect ~66 ms delay for a 4-IC reading.
+        // See MCP3424 for samples-per-second figures, to determine this.
+        delay(66);
+#endif
 
         // Override if nan
-        for(int i = 0; i<4; i++){
-            if(isnan(readings_temperature[i]))
+        for (int i = 0; i < 4; i++)
+        {
+            if (isnan(this->readings_temperature[i]))
             {
-                readings_temperature[i] = 0;
+                this->readings_temperature[i] = 0;
             }
         }
     }
-    
+
     double fake_mosfet_model(double vgs)
     {
         /* Returns a fake current throughput, assuming V_DS == 10V,
@@ -668,122 +662,135 @@ private:
             This was done from our real-world data, and equations derived from trendlines.
         */
         // Trend 1, 3.4>3.95
-        double trend1 = 0.4629629629629629 * vgs -1.574074074074074;
+        double trend1 = 0.4629629629629629 * vgs - 1.574074074074074;
         // Trend 2, 3.95>4.0
-        double trend2 = 12.49999999999999 * vgs -48.99999999999996;
+        double trend2 = 12.49999999999999 * vgs - 48.99999999999996;
         // Trend 3, 4.0 > 5.0
         double trend3 = 749.0 * vgs - 2995.0;
 
-        if(trend1 < 0)
+        if (trend1 < 0)
         {
             trend1 = 0;
         }
-        if(trend2 < 0)
+        if (trend2 < 0)
         {
             trend2 = 0;
         }
-        if(trend3 < 0)
+        if (trend3 < 0)
         {
             trend3 = 0;
-        }        
-        
-        if(vgs <= 3.4)
+        }
+
+        if (vgs <= 3.4)
         {
             return 0;
-        }else if(vgs <= 3.94){
+        }
+        else if (vgs <= 3.94)
+        {
             return trend1;
-        }else if(vgs <= 4.0){
+        }
+        else if (vgs <= 4.0)
+        {
             return trend2;
-        }else{
+        }
+        else
+        {
             return trend3;
         }
     }
 
     void read_currents()
     {
-        /* Read all the Current ADC channels and store into 
-        readings_current array. (AMPS)
+/* Read all the Current ADC channels and store into 
+        this->readings_current array. (AMPS)
         */
-        #if NO_HARDWARE_MODE == 0
-            readings_current[0] = adc_read_current(&adc_current,MCP342x::channel1);
-            readings_current[1] = adc_read_current(&adc_current,MCP342x::channel2);
-            readings_current[2] = adc_read_current(&adc_current,MCP342x::channel3);
-            readings_current[3] = adc_read_current(&adc_current,MCP342x::channel4);
-        #else
-            // In no hardware mode, we use the PWM settings 
-            // and 'pretend' it's letting more current through.
-            // This gives us a 'fake' current response :)
-            
-            // We will also make this non-linear, according to our tests at 10V_DS.
-            // (see DATA/MOSFET_MODULE_10VDS_Variable_VGS)
-            // I plotted some points of V_GS vs I_DS, and fit a curve to that.
-            // Then used the curve equation here to make it 'semi-realistic'
-            // Also added noise! (+/- 2mV on the output_pwm line)    
-        
-            double baseClean1 = (double)5*(double)outputs_pwm[0]/(double)65535;
-            double baseClean2 = (double)5*(double)outputs_pwm[0]/(double)65535;
-            double baseClean3 = (double)5*(double)outputs_pwm[0]/(double)65535;
-            double baseClean4 = (double)5*(double)outputs_pwm[0]/(double)65535;
+#if NO_HARDWARE_MODE == 0
+        this->readings_current[0] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readLatest(1), 5.0, this->adc_current->getChannelMax(1)));
+        this->readings_current[1] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readLatest(2), 5.0, this->adc_current->getChannelMax(2)));
+        this->readings_current[2] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readLatest(3), 5.0, this->adc_current->getChannelMax(3)));
+        this->readings_current[3] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readLatest(4), 5.0, this->adc_current->getChannelMax(4)));
 
-            double baseVoltage1 = ((double)(random(0,40)-20)/(double)1000) + baseClean1;
-            double baseVoltage2 = ((double)(random(0,40)-20)/(double)1000) + baseClean2;
-            double baseVoltage3 = ((double)(random(0,40)-20)/(double)1000) + baseClean3;
-            double baseVoltage4 = ((double)(random(0,40)-20)/(double)1000) + baseClean4;
+        this->readings_current_avg[0] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readAverage(1), 5.0, this->adc_current->getChannelMax(1)));
+        this->readings_current_avg[1] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readAverage(2), 5.0, this->adc_current->getChannelMax(2)));
+        this->readings_current_avg[2] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readAverage(3), 5.0, this->adc_current->getChannelMax(3)));
+        this->readings_current_avg[3] = this->fake_mosfet_model(raw_to_voltage(this->adc_current->readAverage(4), 5.0, this->adc_current->getChannelMax(4)));
+#else
+        // In no hardware mode, we use the PWM settings
+        // and 'pretend' it's letting more current through.
+        // This gives us a 'fake' current response :)
 
-            Serial.println("BASE VOLTAGES");
-            Serial.print(baseVoltage1,6);
-            Serial.print(",");
-            Serial.print(baseVoltage2,6);
-            Serial.print(",");
-            Serial.print(baseVoltage3,6);
-            Serial.print(",");
-            Serial.println(baseVoltage4,6);
+        // We will also make this non-linear, according to our tests at 10V_DS.
+        // (see DATA/MOSFET_MODULE_10VDS_Variable_VGS)
+        // I plotted some points of V_GS vs I_DS, and fit a curve to that.
+        // Then used the curve equation here to make it 'semi-realistic'
+        // Also added noise! (+/- 2mV on the output_pwm line)
 
-            readings_current[0] = fake_mosfet_model(baseVoltage1);
-            readings_current[1] = fake_mosfet_model(baseVoltage2);
-            readings_current[2] = fake_mosfet_model(baseVoltage3);
-            readings_current[3] = fake_mosfet_model(baseVoltage4);
-            
-            // At 14-bit precision, we can expect ~66 ms delay for a 4-IC reading.
-            // See MCP3424 for samples-per-second figures, to determine this.
-            delay(66);
-        #endif
+        double baseClean1 = (double)5 * (double)this->outputs_pwm[0] / (double)65535;
+        double baseClean2 = (double)5 * (double)this->outputs_pwm[0] / (double)65535;
+        double baseClean3 = (double)5 * (double)this->outputs_pwm[0] / (double)65535;
+        double baseClean4 = (double)5 * (double)this->outputs_pwm[0] / (double)65535;
+
+        double baseVoltage1 = ((double)(random(0, 40) - 20) / (double)1000) + baseClean1;
+        double baseVoltage2 = ((double)(random(0, 40) - 20) / (double)1000) + baseClean2;
+        double baseVoltage3 = ((double)(random(0, 40) - 20) / (double)1000) + baseClean3;
+        double baseVoltage4 = ((double)(random(0, 40) - 20) / (double)1000) + baseClean4;
+
+        Serial.println("BASE VOLTAGES");
+        Serial.print(baseVoltage1, 6);
+        Serial.print(",");
+        Serial.print(baseVoltage2, 6);
+        Serial.print(",");
+        Serial.print(baseVoltage3, 6);
+        Serial.print(",");
+        Serial.println(baseVoltage4, 6);
+
+        this->readings_current[0] = this->fake_mosfet_model(baseVoltage1);
+        this->readings_current[1] = this->fake_mosfet_model(baseVoltage2);
+        this->readings_current[2] = this->fake_mosfet_model(baseVoltage3);
+        this->readings_current[3] = this->fake_mosfet_model(baseVoltage4);
+
+        // At 14-bit precision, we can expect ~66 ms delay for a 4-IC reading.
+        // See MCP3424 for samples-per-second figures, to determine this.
+        delay(66);
+#endif
 
         // Override if nan, or <0
-        for(int i = 0; i<4; i++){
-            if(isnan(readings_current[i]) || readings_current[i] < 0)
+        for (int i = 0; i < 4; i++)
+        {
+            if (isnan(this->readings_current[i]) || this->readings_current[i] < 0)
             {
-                readings_current[i] = 0;
+                this->readings_current[i] = 0;
             }
         }
     }
 
-    void read_voltages() 
+    void read_voltages()
     {
-        /* Read all the Voltage ADC channels and store into 
-        readings_voltages array. (Volts)
+/* Read all the Voltage ADC channels and store into 
+        this->readings_voltages array. (Volts)
         */
-        #if NO_HARDWARE_MODE == 0
-            readings_voltage[0] = adc_read_voltage(&adc_voltage,MCP342x::channel1,5);
-            readings_voltage[1] = adc_read_voltage(&adc_voltage,MCP342x::channel2,5);
-            readings_voltage[2] = adc_read_voltage(&adc_voltage,MCP342x::channel3,75);
-            readings_voltage[3] = adc_read_voltage(&adc_voltage,MCP342x::channel4,5);
-        #else
-            // Non-connected noise
-            readings_voltage[0] = (float)random(-200,200)/10;
-            readings_voltage[1] = (float)random(-200,200)/10;
-            readings_voltage[2] = (float)random(-200,200)/10;
-            readings_voltage[3] = (float)random(-200,200)/10;
+#if NO_HARDWARE_MODE == 0
+        this->readings_voltage[0] = raw_to_voltage(this->adc_voltage->readLatest(1), 5.0, this->adc_voltage->getChannelMax(1));
+        this->readings_voltage[1] = raw_to_voltage(this->adc_voltage->readLatest(2), 5.0, this->adc_voltage->getChannelMax(2));
+        this->readings_voltage[2] = raw_to_voltage(this->adc_voltage->readLatest(3), 75.0, this->adc_voltage->getChannelMax(3));
+        this->readings_voltage[3] = raw_to_voltage(this->adc_voltage->readLatest(4), 5.0, this->adc_voltage->getChannelMax(4));
+#else
+        // Non-connected noise
+        this->readings_voltage[0] = (float)random(-200, 200) / 10;
+        this->readings_voltage[1] = (float)random(-200, 200) / 10;
+        this->readings_voltage[2] = (float)random(-200, 200) / 10;
+        this->readings_voltage[3] = (float)random(-200, 200) / 10;
 
-            // System load. 10th volt noise
-            readings_voltage[load_voltage_channel] = 10 + (float)random(-10,10)/(float)100;
-        #endif
+        // System load. 10th volt noise
+        this->readings_voltage[this->load_voltage_channel-1] = 10 + (float)random(-10, 10) / (float)100;
+#endif
 
         // Override if nan, or <0
-        for(int i = 0; i<4; i++){
-            if(isnan(readings_voltage[i]) || readings_voltage[i] < 0)
+        for (int i = 0; i < 4; i++)
+        {
+            if (isnan(this->readings_voltage[i]) || this->readings_voltage[i] < 0)
             {
-                readings_voltage[i] = 0;
+                this->readings_voltage[i] = 0;
             }
         }
     }
@@ -791,30 +798,31 @@ private:
     uint16_t get_highest_pwm_output()
     {
         uint16_t maxOut = 0;
-        if(outputs_pwm[0] > maxOut)
+        if (this->outputs_pwm[0] > maxOut)
         {
-            maxOut = outputs_pwm[0];
+            maxOut = this->outputs_pwm[0];
         }
-        if(outputs_pwm[1] > maxOut)
+        if (this->outputs_pwm[1] > maxOut)
         {
-            maxOut = outputs_pwm[1];
+            maxOut = this->outputs_pwm[1];
         }
-        if(outputs_pwm[2] > maxOut)
+        if (this->outputs_pwm[2] > maxOut)
         {
-            maxOut = outputs_pwm[2];
+            maxOut = this->outputs_pwm[2];
         }
-        if(outputs_pwm[3] > maxOut)
+        if (this->outputs_pwm[3] > maxOut)
         {
-            maxOut = outputs_pwm[3];
+            maxOut = this->outputs_pwm[3];
         }
+        return maxOut;
     }
 
     void reset_pwm_arrays_to_zero()
     {
-        // Resets outputs_pwm arrays to zero
-        outputs_pwm[0] = 0;
-        outputs_pwm[1] = 0;
-        outputs_pwm[2] = 0;
-        outputs_pwm[3] = 0;
+        // Resets this->outputs_pwm arrays to zero
+        this->outputs_pwm[0] = 0;
+        this->outputs_pwm[1] = 0;
+        this->outputs_pwm[2] = 0;
+        this->outputs_pwm[3] = 0;
     }
 };
