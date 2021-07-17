@@ -13,8 +13,20 @@ Last modified: 29/06/2021
 #include <RTClib.h>
 #include "../../EL_ADC_PWM_Module/headers/control_loop.h"
 
+// Define ADC function by addrress
+uint8_t adc_temperature_addr = 0x6B; // MARKED AS 0X69 ON THE PCB
+uint8_t adc_current_addr = 0x68; // MARKED AS 0X68 ON THE PCB
+uint8_t adc_voltage_addr = 0x6C; // MARKED AS 0X6A ON THE PCB
+
+// Setup the PWM stuff
+Adafruit_TLC59711 pwmModule = Adafruit_TLC59711(1,7,8);
+ADCHandler adc_temperature = ADCHandler(adc_temperature_addr);
+ADCHandler adc_current = ADCHandler(adc_current_addr);
+ADCHandler adc_voltage = ADCHandler(adc_voltage_addr);
+
 // Control loop object which handles our PWM/ADC hardware.
-ControlLoop controller;
+ControlLoop controller = ControlLoop(&pwmModule,&adc_temperature,&adc_current,&adc_voltage);
+
 
 // RTC object which handles RTC hardware
 RTC_PCF8523 rtc;
@@ -957,9 +969,9 @@ void isr1()
 
 void setup()
 {
-
   Serial.begin(9600);
-
+  Wire.begin();
+  
   if (!rtc.begin())
   {
     Serial.println("Couldn't find RTC");
