@@ -10,7 +10,7 @@
 #define NO_HARDWARE_MODE 1
 
 #include <Adafruit_TLC59711.h>
-#include <adc_nonblocking.h>
+#include "adc_nonblocking.h"
 #include "pwm_utils.h"
 #include "adc_utils.h"
 #include <PID_v1.h>

@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <MCP342x.h>
-#include <utils.h>
+#include "utils.h"
 
 class ADCHandler
 {
