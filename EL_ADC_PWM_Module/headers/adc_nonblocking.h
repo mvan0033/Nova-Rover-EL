@@ -15,10 +15,10 @@ private:
   long temp;
 
   // PER channel configuration, so we can have different gains per-channel etc.
-  MCP342x::Config configCH1 = MCP342x::Config(MCP342x::channel1, MCP342x::continous, MCP342x::resolution18, MCP342x::gain1); // SET the current resolution, channel, gain, etc.
-  MCP342x::Config configCH2 = MCP342x::Config(MCP342x::channel2, MCP342x::continous, MCP342x::resolution18, MCP342x::gain1);
-  MCP342x::Config configCH3 = MCP342x::Config(MCP342x::channel3, MCP342x::continous, MCP342x::resolution18, MCP342x::gain1);
-  MCP342x::Config configCH4 = MCP342x::Config(MCP342x::channel4, MCP342x::continous, MCP342x::resolution18, MCP342x::gain1);
+  MCP342x::Config configCH1 = MCP342x::Config(MCP342x::channel1, MCP342x::continous, MCP342x::resolution16, MCP342x::gain1); // SET the current resolution, channel, gain, etc.
+  MCP342x::Config configCH2 = MCP342x::Config(MCP342x::channel2, MCP342x::continous, MCP342x::resolution16, MCP342x::gain1);
+  MCP342x::Config configCH3 = MCP342x::Config(MCP342x::channel3, MCP342x::continous, MCP342x::resolution16, MCP342x::gain1);
+  MCP342x::Config configCH4 = MCP342x::Config(MCP342x::channel4, MCP342x::continous, MCP342x::resolution16, MCP342x::gain1);
 
   MCP342x::Config status; // GET the current result, ready-state, etc.
 

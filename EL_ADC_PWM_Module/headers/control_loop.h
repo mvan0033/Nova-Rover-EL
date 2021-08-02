@@ -7,7 +7,7 @@
 // WITHOUT any of the PWM/ADC hardware modules.
 // Set to 1 for no hardware
 // Set to 0 for normal operation (expects I2C, SPI devices to be attached)
-#define NO_HARDWARE_MODE 1
+#define NO_HARDWARE_MODE 0
 
 #include <Adafruit_TLC59711.h>
 #include "adc_nonblocking.h"
@@ -36,7 +36,7 @@ public:
         M1  |   M2
     */
 
-    int8_t mosfetModuleCount = 4;
+    int8_t mosfetModuleCount = 3; // Change depending on number of modules connected
     
 
     /* Control loop targets */
@@ -49,9 +49,9 @@ public:
     uint16_t targetValue = 0; // Target value (could be Amps or Watts)
 
     /* GLOBAL SAFETY LIMITS */
-    uint16_t currentLimit = 100;     // AMPS
-    uint16_t powerLimit = 1000;      // WATTS
-    uint16_t temperatureLimit = 600; // DEGREES C
+    uint16_t currentLimit = 10;     // AMPS LIMIT FOR ENTIRE LOAD
+    uint16_t powerLimit = 100;      // WATTS LIMIT FOR ENTIRE LOAD
+    uint16_t temperatureLimit = 45; // DEGREES C, per module
 
     /* Latest ADC readings per channel */
     // These are updated only when the MCP3424 chip has a fresh set of readings for us.
