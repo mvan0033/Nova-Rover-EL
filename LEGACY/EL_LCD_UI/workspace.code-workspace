@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"name": "pwm_test",
+			"path": "..\\EL_ADC_PWM_Module\\pwm_test"
+		}
+	],
+	"settings": {}
+}
